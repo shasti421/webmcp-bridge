@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Todo App</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; max-width: 600px; margin: 40px auto; padding: 0 20px; }
+    h1 { color: #333; }
+    .input-row { display: flex; gap: 8px; margin-bottom: 20px; }
+    .new-todo { flex: 1; padding: 8px 12px; border: 1px solid #ccc; border-radius: 4px; font-size: 14px; }
+    .add-todo { padding: 8px 16px; background: #4a90d9; color: #fff; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; }
+    .add-todo:hover { background: #357abd; }
+    .todo-list { list-style: none; padding: 0; }
+    .todo-item { display: flex; align-items: center; gap: 10px; padding: 10px; border-bottom: 1px solid #eee; }
+    .todo-item.completed .todo-text { text-decoration: line-through; color: #999; }
+    .todo-text { flex: 1; }
+    .todo-toggle { cursor: pointer; }
+    .todo-delete { background: #e74c3c; color: #fff; border: none; border-radius: 4px; padding: 4px 8px; cursor: pointer; font-size: 12px; }
+    .todo-count { margin-top: 16px; color: #666; font-size: 14px; }
+  </style>
+</head>
+<body>
+  <h1>My Todos</h1>
+
+  <div class="input-row">
+    <input
+      class="new-todo"
+      type="text"
+      placeholder="What to do?"
+      aria-label="New Todo"
+      role="textbox"
+    />
+    <button class="add-todo" aria-label="Add">Add</button>
+  </div>
+
+  <ul class="todo-list" role="list"></ul>
+
+  <div class="todo-count" role="status">0 items left</div>
+
+  <script src="app.js"></script>
+</body>
+</html>
