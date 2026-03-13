@@ -5,6 +5,6 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": { "build": "tsc", "test": "vitest run" },
-  "dependencies": { "@webmcp-bridge/core": "workspace:*", "js-yaml": "^4.1.0" },
+  "dependencies": { "@webmcp-bridge/core": "*", "js-yaml": "^4.1.0" },
   "devDependencies": { "vitest": "^1.2.0", "typescript": "^5.3.0" }
 }
