@@ -100,7 +100,7 @@ const interactionStepSchema = {
   properties: {
     action: {
       type: 'string' as const,
-      enum: ['click', 'type', 'select', 'check', 'clear', 'hover', 'wait'],
+      enum: ['click', 'type', 'fill', 'select', 'check', 'clear', 'hover', 'wait'],
     },
     target: { type: 'string' as const },
     value: { type: 'string' as const },
@@ -204,7 +204,7 @@ const pageSchema = {
             properties: {
               type: {
                 type: 'string' as const,
-                enum: ['fill', 'click', 'select', 'check', 'multiselect', 'custom'],
+                enum: ['fill', 'click', 'select', 'check', 'multiselect', 'custom', 'text_input', 'type'],
               },
               pattern: { type: 'string' as const },
               steps: {
@@ -329,7 +329,7 @@ const toolStepSchema = {
       type: 'object' as const, required: ['interact'], additionalProperties: false,
       properties: {
         interact: {
-          type: 'object' as const, required: ['field'], additionalProperties: false,
+          type: 'object' as const, additionalProperties: false,
           properties: {
             field: { type: 'string' as const },
             action: { type: 'string' as const },

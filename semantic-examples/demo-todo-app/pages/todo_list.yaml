@@ -69,5 +69,5 @@ page:
           selectors:
             - strategy: css
               selector: ".todo-count"
-          pattern: "(\d+) items? left"
+          pattern: '(\d+) items? left'
           group: 1
