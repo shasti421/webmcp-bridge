@@ -1,16 +1,87 @@
 /**
  * MockDriver — test double for BridgeDriver.
- * Used by all unit tests in core. Allows recording + asserting calls.
+ * Used by all unit tests in core. Every method is a vitest spy (vi.fn()).
  *
- * Implementation notes for agents:
- * - Every method records the call args and returns configurable responses
- * - Use mockDriver.whenFindElement(selectors).thenReturn(element)
- * - Use mockDriver.whenReadText(selectors).thenReturn("text")
- * - Use mockDriver.calls to inspect what was called
+ * Usage:
+ *   const driver = createMockDriver();
+ *   (driver.readText as ReturnType<typeof vi.fn>).mockResolvedValue('Hello');
+ *   const text = await driver.readText([...]);
  */
-import type { BridgeDriver } from '../types/bridge-driver.js';
+import { vi } from 'vitest';
+
+import type { BridgeDriver, ElementHandle, PageHandle, PageContext } from '../types/bridge-driver.js';
+
+const DEFAULT_ELEMENT_HANDLE: ElementHandle = { _brand: 'ElementHandle' };
+
+const DEFAULT_PAGE_CONTEXT: PageContext = {
+  url: 'about:blank',
+  title: '',
+  readyState: 'complete',
+};
 
 export function createMockDriver(overrides?: Partial<BridgeDriver>): BridgeDriver {
-  // TODO: Implement full mock — see test helpers pattern in AGENTS.md
-  throw new Error('Not implemented — see spec: docs/specs/testing-spec.md');
+  const defaults: BridgeDriver = {
+    // Navigation
+    goto: vi.fn<[string], Promise<void>>().mockResolvedValue(undefined),
+    waitForNavigation: vi.fn().mockResolvedValue(undefined),
+
+    // Element discovery
+    findElement: vi.fn().mockResolvedValue(DEFAULT_ELEMENT_HANDLE),
+
+    // Interactions
+    click: vi.fn().mockResolvedValue(undefined),
+    doubleClick: vi.fn().mockResolvedValue(undefined),
+    type: vi.fn().mockResolvedValue(undefined),
+    select: vi.fn().mockResolvedValue(undefined),
+    check: vi.fn().mockResolvedValue(undefined),
+    clear: vi.fn().mockResolvedValue(undefined),
+    hover: vi.fn().mockResolvedValue(undefined),
+    dragDrop: vi.fn().mockResolvedValue(undefined),
+    uploadFile: vi.fn().mockResolvedValue(undefined),
+
+    // Reading
+    readText: vi.fn().mockResolvedValue(''),
+    readPattern: vi.fn().mockResolvedValue(null),
+
+    // Keyboard
+    pressKey: vi.fn().mockResolvedValue(undefined),
+    pressSequentially: vi.fn().mockResolvedValue(undefined),
+
+    // Scrolling
+    scroll: vi.fn().mockResolvedValue(undefined),
+
+    // Overlays
+    dismissOverlay: vi.fn().mockResolvedValue(false),
+
+    // Events
+    dispatchEvent: vi.fn().mockResolvedValue(undefined),
+
+    // Frames
+    switchFrame: vi.fn().mockResolvedValue(undefined),
+
+    // Dialogs
+    handleDialog: vi.fn().mockResolvedValue(''),
+
+    // Waiting
+    waitFor: vi.fn().mockResolvedValue(undefined),
+
+    // Diagnostics
+    screenshot: vi.fn().mockResolvedValue(Buffer.alloc(0)),
+
+    // JS escape hatch
+    evaluate: vi.fn().mockResolvedValue(undefined),
+
+    // Context
+    getPageContext: vi.fn().mockResolvedValue({ ...DEFAULT_PAGE_CONTEXT }),
+
+    // Multi-tab
+    getNamedPage: vi.fn().mockImplementation((name: string): Promise<PageHandle> =>
+      Promise.resolve({ _brand: 'PageHandle', name }),
+    ),
+    createPage: vi.fn().mockImplementation((name: string): Promise<PageHandle> =>
+      Promise.resolve({ _brand: 'PageHandle', name }),
+    ),
+  };
+
+  return { ...defaults, ...overrides };
 }
