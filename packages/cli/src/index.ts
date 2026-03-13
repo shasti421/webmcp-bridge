@@ -15,6 +15,8 @@
 import { Command } from 'commander';
 
 import { initCommand } from './commands/init.js';
+import { publishCommand } from './commands/publish.js';
+import { pullCommand } from './commands/pull.js';
 import { validateCommand } from './commands/validate.js';
 
 const program = new Command();
@@ -87,6 +89,68 @@ program
           console.error(`  - ${warning}`);
         }
         process.exit(3);
+      }
+    } catch (e: unknown) {
+      console.error(`Error: ${e instanceof Error ? e.message : String(e)}`);
+      process.exit(1);
+    }
+  });
+
+program
+  .command('publish')
+  .argument('[path]', 'Path to app directory', '.')
+  .requiredOption('--app <id>', 'Application ID')
+  .requiredOption('--version <version>', 'Semantic version')
+  .option('--registry <url>', 'Remote registry URL')
+  .option('--dry-run', 'Validate without publishing')
+  .description('Publish app to registry')
+  .action(async (appPath: string, options: { app: string; version: string; registry?: string; dryRun?: boolean }) => {
+    try {
+      const result = await publishCommand(appPath, {
+        appId: options.app,
+        version: options.version,
+        registryUrl: options.registry,
+      });
+
+      if (result.success) {
+        // eslint-disable-next-line no-console
+        console.log(`Published: ${options.app}@${options.version}`);
+      } else {
+        console.error(`Publish failed: ${result.error}`);
+        process.exit(1);
+      }
+    } catch (e: unknown) {
+      console.error(`Error: ${e instanceof Error ? e.message : String(e)}`);
+      process.exit(1);
+    }
+  });
+
+program
+  .command('pull')
+  .argument('<app-id>', 'Application ID to pull')
+  .option('--version <version>', 'Semantic version', 'latest')
+  .option('--registry <url>', 'Remote registry URL')
+  .option('--source <path>', 'Local source path (instead of remote)')
+  .description('Install app from registry')
+  .action(async (appId: string, options: { version: string; registry?: string; source?: string }) => {
+    try {
+      const result = await pullCommand({
+        appId,
+        version: options.version,
+        sourcePath: options.source,
+        registryUrl: options.registry,
+      });
+
+      if (result.success) {
+        // eslint-disable-next-line no-console
+        console.log(`Installed: ${appId}@${options.version}`);
+        if (result.installPath) {
+          // eslint-disable-next-line no-console
+          console.log(`  Path: ${result.installPath}`);
+        }
+      } else {
+        console.error(`Pull failed: ${result.error}`);
+        process.exit(1);
       }
     } catch (e: unknown) {
       console.error(`Error: ${e instanceof Error ? e.message : String(e)}`);
