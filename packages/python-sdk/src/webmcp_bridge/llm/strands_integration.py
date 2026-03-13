@@ -35,6 +35,9 @@ from __future__ import annotations
 
 from typing import Any
 
+from strands import Agent
+from strands.tools import tool
+
 
 def create_bridge_tools(bridge: Any) -> list[Any]:
     """
@@ -45,11 +48,37 @@ def create_bridge_tools(bridge: Any) -> list[Any]:
     - When called, executes bridge.execute(name, params)
     - Returns the captured outputs dict
     """
-    # TODO: Implement
-    # 1. Call bridge.get_tool_schemas()
-    # 2. For each schema, dynamically create a @tool decorated function
-    # 3. Return list of tool callables
-    raise NotImplementedError("See spec: docs/specs/strands-integration-spec.md")
+    tool_schemas = bridge.get_tool_schemas()
+    tools = []
+
+    for schema in tool_schemas:
+        tool_name = schema["name"]
+        tool_description = schema["description"]
+        tool_input_schema = schema["inputSchema"]
+
+        # Create a closure to capture tool_name for each tool
+        def _make_tool_fn(name: str) -> Any:
+            def tool_fn(**kwargs: Any) -> dict[str, Any]:
+                """Execute the bridge tool and return outputs."""
+                return bridge.execute(name, kwargs)
+
+            tool_fn.__name__ = name
+            tool_fn.__qualname__ = name
+            return tool_fn
+
+        fn = _make_tool_fn(tool_name)
+
+        # Decorate with @tool
+        decorated = tool(
+            fn,
+            name=tool_name,
+            description=tool_description,
+            inputSchema=tool_input_schema,
+        )
+
+        tools.append(decorated)
+
+    return tools
 
 
 def create_bridge_agent(
@@ -64,9 +93,54 @@ def create_bridge_agent(
     The agent can receive NLP commands and automatically route them
     to the appropriate bridge tool based on the command intent.
     """
-    # TODO: Implement
-    # 1. from strands import Agent
-    # 2. from strands.models import BedrockModel (or appropriate provider)
-    # 3. tools = create_bridge_tools(bridge)
-    # 4. Return Agent(model=model, tools=tools, system_prompt=system_prompt)
-    raise NotImplementedError
+    # Create model based on provider
+    model = _create_model(model_provider, model_id)
+
+    # Generate bridge tools
+    tools = create_bridge_tools(bridge)
+
+    # Build system prompt if not provided
+    if system_prompt is None:
+        tool_schemas = bridge.get_tool_schemas()
+        tool_lines = [f"- {s['name']}: {s['description']}" for s in tool_schemas]
+        system_prompt = (
+            "You are an assistant that can use web automation tools to interact "
+            "with web applications.\n\n"
+            "Available tools:\n"
+            + "\n".join(tool_lines)
+            + "\n\n"
+            "Instructions:\n"
+            "1. When the user asks you to perform a task, identify which tool(s) are needed\n"
+            "2. Use structured tool calls with exact parameter names and types\n"
+            "3. Provide input parameters based on the user's request\n"
+            "4. After tool execution, inform the user of the result\n"
+            "5. If a tool fails, try alternative approaches or explain what went wrong"
+        )
+
+    return Agent(
+        model=model,
+        tools=tools,
+        system_prompt=system_prompt,
+    )
+
+
+def _create_model(provider: str, model_id: str) -> Any:
+    """Create a Strands model instance from provider name."""
+    if provider == "bedrock":
+        from strands.models.bedrock import BedrockModel
+        return BedrockModel(model_id=model_id)
+
+    if provider == "anthropic":
+        from strands.models.anthropic import AnthropicModel
+        return AnthropicModel(model_id=model_id)
+
+    if provider == "openai":
+        from strands.models.openai import OpenAIModel
+        return OpenAIModel(model_id=model_id)
+
+    if provider == "ollama":
+        from strands.models.ollama import OllamaModel
+        return OllamaModel(model_id=model_id)
+
+    msg = f"Unknown model provider: {provider}"
+    raise ValueError(msg)
