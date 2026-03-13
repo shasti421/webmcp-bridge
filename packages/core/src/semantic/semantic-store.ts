@@ -78,15 +78,37 @@ export class SemanticStore {
   }
 
   /**
-   * Load semantic definitions from a registry (local or remote).
+   * Load semantic definitions from a registry path.
+   *
+   * The registryPath should point to a resolved app version directory
+   * (e.g., ~/.webmcp-bridge/registry/my_app/1.0.0/) containing
+   * app.yaml, pages/, tools/, workflows/.
+   *
+   * Use LocalRegistry.resolve() to get this path before calling.
    */
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  async loadFromRegistry(appId: string, version?: string): Promise<Result<void, BridgeError>> {
-    return err(createBridgeError(
-      'REGISTRY_ERROR',
-      'Registry loading not yet implemented',
-      'registry',
-    ));
+  async loadFromRegistry(registryPath: string): Promise<Result<void, BridgeError>> {
+    // Validate that the path exists
+    if (!fs.existsSync(registryPath)) {
+      return err(createBridgeError(
+        'REGISTRY_ERROR',
+        `Registry path does not exist: ${registryPath}`,
+        'registry',
+      ));
+    }
+
+    // Validate that app.yaml exists (registry entries must have an app definition)
+    const appYamlPath = path.join(registryPath, 'app.yaml');
+    const appYmlPath = path.join(registryPath, 'app.yml');
+    if (!fs.existsSync(appYamlPath) && !fs.existsSync(appYmlPath)) {
+      return err(createBridgeError(
+        'REGISTRY_ERROR',
+        `No app.yaml found in registry path: ${registryPath}`,
+        'registry',
+      ));
+    }
+
+    // Delegate to loadFromDirectory which handles YAML loading and validation
+    return this.loadFromDirectory(registryPath);
   }
 
   getApp(appId: string): AppDefinition | undefined {
@@ -175,6 +197,13 @@ export class SemanticStore {
     }
 
     return page.outputs.find((o) => o.id === outputId);
+  }
+
+  /**
+   * List all loaded tools.
+   */
+  listTools(): ToolDefinition[] {
+    return [...this.tools.values()];
   }
 
   /**
