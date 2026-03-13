@@ -3,6 +3,7 @@
  * Uses mock driver and mock semantic store.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+
 import { ExecutionEngine } from '../execution-engine.js';
 import { createMockDriver } from '../../drivers/mock-driver.js';
 import type { BridgeDriver } from '../../types/bridge-driver.js';
