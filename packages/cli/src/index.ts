@@ -15,6 +15,7 @@
 import { Command } from 'commander';
 
 import { initCommand } from './commands/init.js';
+import { validateCommand } from './commands/validate.js';
 
 const program = new Command();
 
@@ -58,9 +59,39 @@ program
   .option('--strict', 'Fail on warnings')
   .option('--verbose', 'Detailed output')
   .description('Validate YAML files in a directory against schemas')
-  .action((_path: string, _options: { strict?: boolean; verbose?: boolean }) => {
-    console.error('validate command: not yet implemented');
-    process.exit(1);
+  .action(async (dirPath: string, options: { strict?: boolean; verbose?: boolean }) => {
+    try {
+      const result = await validateCommand(dirPath);
+
+      if (result.valid) {
+        // eslint-disable-next-line no-console
+        console.log(`Validating: ${dirPath}\n`);
+        // eslint-disable-next-line no-console
+        console.log(`Summary: ${result.fileCount} files validated, 0 errors, ${result.warnings.length} warnings`);
+        // eslint-disable-next-line no-console
+        console.log(`  Apps: ${result.summary.apps}, Pages: ${result.summary.pages}, Tools: ${result.summary.tools}, Workflows: ${result.summary.workflows}`);
+      } else {
+        console.error(`Validation failed:\n`);
+        for (const error of result.errors) {
+          console.error(`  - ${error}`);
+        }
+        if (options.verbose) {
+          console.error(`\nFiles scanned: ${result.fileCount}`);
+        }
+        process.exit(3);
+      }
+
+      if (options.strict && result.warnings.length > 0) {
+        console.error(`\nWarnings (--strict mode):`);
+        for (const warning of result.warnings) {
+          console.error(`  - ${warning}`);
+        }
+        process.exit(3);
+      }
+    } catch (e: unknown) {
+      console.error(`Error: ${e instanceof Error ? e.message : String(e)}`);
+      process.exit(1);
+    }
   });
 
 program.parse();
