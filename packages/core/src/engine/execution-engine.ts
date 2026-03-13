@@ -190,13 +190,11 @@ export class ExecutionEngine {
       startTime,
     };
 
-    let stepsExecuted = 0;
     const errors: BridgeError[] = [];
 
     for (const step of workflow.steps) {
       const stepResult = await this.executeWorkflowStep(step, context, driver);
 
-      stepsExecuted++;
       context.stepIndex++;
 
       if (!stepResult.ok) {
@@ -265,7 +263,7 @@ export class ExecutionEngine {
     }
     if ('interact' in stepObj) {
       return this.executeInteractStep(
-        stepObj['interact'] as { field?: string; action?: string; value?: string; target?: string },
+        stepObj['interact'] as { field?: string; action?: string; value?: string; target?: string; dispatch?: Array<{ event: string; bubbles?: boolean }> },
         context,
         driver,
       );
@@ -344,7 +342,7 @@ export class ExecutionEngine {
   }
 
   private async executeInteractStep(
-    interact: { field?: string; action?: string; value?: string; target?: string },
+    interact: { field?: string; action?: string; value?: string; target?: string; dispatch?: Array<{ event: string; bubbles?: boolean }> },
     context: ExecutionContext,
     driver: BridgeDriver,
   ): Promise<Result<{ capturedValue?: unknown; captureKey?: string }, BridgeError>> {
@@ -438,6 +436,24 @@ export class ExecutionEngine {
         'engine',
         { fieldId: fieldRef, stepIndex: context.stepIndex },
       ));
+    }
+
+    // Dispatch events if specified
+    if (interact.dispatch) {
+      for (const evt of interact.dispatch) {
+        try {
+          await driver.dispatchEvent(element, evt.event, {
+            bubbles: evt.bubbles ?? true,
+          });
+        } catch (e: unknown) {
+          return err(createBridgeError(
+            'DRIVER_ERROR',
+            `Failed to dispatch event "${evt.event}" on field ${fieldRef}: ${e instanceof Error ? e.message : String(e)}`,
+            'engine',
+            { fieldId: fieldRef, stepIndex: context.stepIndex },
+          ));
+        }
+      }
     }
 
     return ok({});
