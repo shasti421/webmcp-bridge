@@ -1,0 +1,41 @@
+name: Feature
+description: New feature implementation task
+labels: ["enhancement"]
+body:
+  - type: input
+    id: package
+    attributes:
+      label: Package
+      description: Which package does this affect?
+      placeholder: "core | playwright | extension | python-sdk | registry | cli"
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: What needs to be implemented?
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance Criteria
+      description: How do we know this is done?
+      value: |
+        - [ ] Implementation complete
+        - [ ] Unit tests pass (80%+ coverage)
+        - [ ] Lint + typecheck pass
+        - [ ] Documentation updated if needed
+    validations:
+      required: true
+  - type: textarea
+    id: spec
+    attributes:
+      label: Spec Reference
+      description: Link to spec in docs/specs/ if applicable
+  - type: textarea
+    id: depends
+    attributes:
+      label: Dependencies
+      description: Which issues must be completed before this one?

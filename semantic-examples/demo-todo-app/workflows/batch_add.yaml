@@ -1,0 +1,28 @@
+# Workflow: Add multiple todo items from a list
+workflow:
+  name: batch_add_todos
+  description: >
+    Add multiple todo items in sequence. Returns count of items added.
+  input:
+    items:
+      type: array
+      required: true
+      description: "List of todo text strings to add"
+  output:
+    added_count:
+      type: number
+    final_count:
+      type: string
+  steps:
+    - for_each: "{{items}}"
+      as: item
+      on_error: continue
+      steps:
+        - tool: add_todo
+          params:
+            text: "{{item}}"
+          capture:
+            last_count: "{{result.item_count}}"
+    - aggregate:
+        added_count: "{{loop.successes.length}}"
+        final_count: "{{last_count}}"

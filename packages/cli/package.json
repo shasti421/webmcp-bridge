@@ -1,0 +1,9 @@
+{
+  "name": "@webmcp-bridge/cli",
+  "version": "0.1.0",
+  "description": "CLI for validate, capture, test, publish semantic definitions",
+  "bin": { "webmcp-bridge": "dist/index.js" },
+  "scripts": { "build": "tsc", "test": "vitest run" },
+  "dependencies": { "@webmcp-bridge/core": "workspace:*", "@webmcp-bridge/registry": "workspace:*", "commander": "^12.0.0", "chalk": "^5.3.0" },
+  "devDependencies": { "vitest": "^1.2.0", "typescript": "^5.3.0" }
+}

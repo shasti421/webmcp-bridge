@@ -1,0 +1,13 @@
+# Demo Todo App — used for e2e testing and as an example
+# This is NOT a production definition — it demonstrates the YAML schema
+app:
+  id: demo-todo-app
+  name: Demo Todo Application
+  base_url: "http://localhost:3000"
+  url_patterns:
+    - "http://localhost:3000/**"
+  description: "Simple todo app for testing WebMCP Bridge"
+  registry:
+    publisher: webmcp-bridge-team
+    tags: [demo, testing, todo]
+    license: MIT

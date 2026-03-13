@@ -1,0 +1,192 @@
+name: Agent Pipeline
+
+on:
+  workflow_dispatch:
+    inputs:
+      description:
+        description: 'Feature or issue description'
+        required: true
+        type: string
+      issue_number:
+        description: 'Related GitHub issue number (optional)'
+        required: false
+        type: string
+      implementation_hints:
+        description: 'Implementation hints (optional)'
+        required: false
+        type: string
+      auto_merge:
+        description: 'Automatically merge PR if tests pass'
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+  checks: write
+
+jobs:
+  create-issue:
+    runs-on: ubuntu-latest
+    name: Create Issue
+    outputs:
+      issue_number: ${{ steps.create.outputs.issue_number }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Create issue via agent
+        id: create
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPO: ${{ github.repository }}
+        run: |
+          if [ -z "${{ inputs.issue_number }}" ]; then
+            python -m agents.issue_creator.agent \
+              --description "${{ inputs.description }}" \
+              --implementation_hints "${{ inputs.implementation_hints }}"
+          else
+            echo "issue_number=${{ inputs.issue_number }}" >> $GITHUB_OUTPUT
+          fi
+
+  implement:
+    runs-on: ubuntu-latest
+    name: Implement Feature
+    needs: create-issue
+    outputs:
+      branch_name: ${{ steps.implement.outputs.branch_name }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run feature implementer
+        id: implement
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPO: ${{ github.repository }}
+          ISSUE_NUMBER: ${{ needs.create-issue.outputs.issue_number }}
+        run: |
+          python -m agents.feature_implementer.agent \
+            --issue_number "$ISSUE_NUMBER" \
+            --description "${{ inputs.description }}"
+
+  open-pr:
+    runs-on: ubuntu-latest
+    name: Open Pull Request
+    needs: [ create-issue, implement ]
+    outputs:
+      pr_number: ${{ steps.open_pr.outputs.pr_number }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Open PR via agent
+        id: open_pr
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPO: ${{ github.repository }}
+          ISSUE_NUMBER: ${{ needs.create-issue.outputs.issue_number }}
+          BRANCH_NAME: ${{ needs.implement.outputs.branch_name }}
+        run: |
+          python -m agents.pr_opener.agent \
+            --issue_number "$ISSUE_NUMBER" \
+            --branch_name "$BRANCH_NAME"
+
+  test:
+    runs-on: ubuntu-latest
+    name: Run Tests
+    needs: open-pr
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.implement.outputs.branch_name }}
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pytest pytest-cov pytest-asyncio
+          pip install -r requirements.txt
+
+      - name: Run tests via runner agent
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ needs.open-pr.outputs.pr_number }}
+        run: |
+          python -m agents.test_runner.agent \
+            --pr_number "$PR_NUMBER"
+
+  review-merge:
+    runs-on: ubuntu-latest
+    name: Review and Merge
+    needs: [ open-pr, test ]
+    if: success()
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Review and merge via agent
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ needs.open-pr.outputs.pr_number }}
+          AUTO_MERGE: ${{ inputs.auto_merge }}
+        run: |
+          python -m agents.reviewer_merger.agent \
+            --pr_number "$PR_NUMBER" \
+            --auto_merge "$AUTO_MERGE"

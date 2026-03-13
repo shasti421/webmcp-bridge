@@ -1,0 +1,13 @@
+{
+  "manifest_version": 3,
+  "name": "WebMCP Bridge",
+  "version": "0.1.0",
+  "description": "Make any web application behave as if it had native WebMCP tools",
+  "permissions": ["activeTab", "sidePanel", "storage", "scripting", "tabs"],
+  "host_permissions": ["<all_urls>"],
+  "background": { "service_worker": "service-worker.js", "type": "module" },
+  "content_scripts": [{ "matches": ["<all_urls>"], "js": ["content-script.js"] }],
+  "side_panel": { "default_path": "panel.html" },
+  "action": { "default_title": "WebMCP Bridge" },
+  "icons": {}
+}

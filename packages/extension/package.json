@@ -1,0 +1,8 @@
+{
+  "name": "@webmcp-bridge/extension",
+  "version": "0.1.0",
+  "description": "Chrome Extension (Manifest V3) — Capture + Execute modes",
+  "scripts": { "build": "vite build", "dev": "vite build --watch", "test": "vitest run" },
+  "dependencies": { "@webmcp-bridge/core": "workspace:*", "react": "^18.2.0", "react-dom": "^18.2.0" },
+  "devDependencies": { "@types/chrome": "^0.0.260", "@types/react": "^18.2.0", "@types/react-dom": "^18.2.0", "@vitejs/plugin-react": "^4.2.0", "vite": "^5.1.0", "vitest": "^1.2.0", "typescript": "^5.3.0" }
+}

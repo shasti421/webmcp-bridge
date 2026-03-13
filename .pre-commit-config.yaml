@@ -1,0 +1,97 @@
+default_language_version:
+  python: python3.10
+
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.1.11
+    hooks:
+      - id: ruff
+        args: [--fix]
+        stages: [commit]
+      - id: ruff-format
+        stages: [commit]
+
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.7.1
+    hooks:
+      - id: mypy
+        additional_dependencies: [
+          'types-pyyaml',
+          'types-requests',
+          'strands-agents',
+          'strands-agents-tools',
+        ]
+        args: [--strict, --ignore-missing-imports]
+        stages: [commit]
+        files: ^webmcp_bridge/
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.5.0
+    hooks:
+      - id: trailing-whitespace
+        stages: [commit]
+      - id: end-of-file-fixer
+        stages: [commit]
+      - id: check-yaml
+        args: [--unsafe]
+        stages: [commit]
+      - id: check-json
+        stages: [commit]
+      - id: check-toml
+        stages: [commit]
+      - id: check-added-large-files
+        args: [--maxkb=1000]
+        stages: [commit]
+      - id: check-merge-conflict
+        stages: [commit]
+      - id: debug-statements
+        stages: [commit]
+      - id: mixed-line-ending
+        args: [--fix=lf]
+        stages: [commit]
+
+  - repo: local
+    hooks:
+      - id: agent-legibility-check
+        name: Agent Code Legibility Check
+        entry: python scripts/checks/agent_legibility.py
+        language: python
+        types: [python]
+        stages: [commit]
+        files: ^agents/
+
+      - id: tool-documentation-check
+        name: Tool Documentation Check
+        entry: python scripts/checks/tool_docs.py
+        language: python
+        types: [python]
+        stages: [commit]
+        files: (^agents/.*/tools/|^core/.*/tools/)
+
+      - id: test-coverage-check
+        name: Test Coverage Check
+        entry: python scripts/checks/test_coverage.py
+        language: python
+        stages: [commit]
+        pass_filenames: false
+
+  - repo: https://github.com/hadialqattan/pycln
+    rev: v2.2.3
+    hooks:
+      - id: pycln
+        args: [--all]
+        stages: [commit]
+
+ci:
+  autofix_commit_msg: |
+    style: fix code formatting and linting issues
+
+    - Run ruff format and fix
+    - Update imports with pycln
+    - Fix line endings
+  autofix_prs: true
+  autoupdate_branch: ''
+  autoupdate_commit_msg: 'chore: update pre-commit hook versions'
+  autoupdate_schedule: weekly
+  skip: [agent-legibility-check, tool-documentation-check, test-coverage-check]
+  submodules: false

@@ -1,0 +1,34 @@
+{
+  "name": "webmcp-bridge",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Make any web application behave as if it had native WebMCP tools",
+  "workspaces": [
+    "packages/core",
+    "packages/playwright",
+    "packages/extension",
+    "packages/registry",
+    "packages/cli"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "test:e2e": "npx playwright test --config=tests/e2e/playwright.config.ts",
+    "lint": "eslint 'packages/*/src/**/*.ts' --max-warnings 0",
+    "typecheck": "tsc --build tsconfig.json",
+    "validate:semantic": "node packages/cli/dist/index.js validate --path ./semantic-examples",
+    "check-deps": "node scripts/check-deps.js",
+    "prepare": "npm run build"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "@typescript-eslint/eslint-plugin": "^7.0.0",
+    "@typescript-eslint/parser": "^7.0.0",
+    "eslint": "^8.56.0",
+    "eslint-plugin-import": "^2.29.0",
+    "prettier": "^3.2.0",
+    "typescript": "^5.3.0",
+    "vitest": "^1.2.0"
+  },
+  "engines": { "node": ">=20.0.0", "npm": ">=10.0.0" }
+}

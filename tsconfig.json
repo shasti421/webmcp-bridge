@@ -1,0 +1,10 @@
+{
+  "files": [],
+  "references": [
+    { "path": "packages/core" },
+    { "path": "packages/playwright" },
+    { "path": "packages/extension" },
+    { "path": "packages/registry" },
+    { "path": "packages/cli" }
+  ]
+}

@@ -1,0 +1,73 @@
+# Page: Todo List — the main screen of the demo app
+page:
+  id: todo_list
+  app: demo-todo-app
+  url_pattern: "/"
+  url_template: "{{app.base_url}}/"
+  wait_for: ".todo-list"
+
+  fields:
+    - id: new_todo_input
+      label: New Todo
+      type: text
+      selectors:
+        - strategy: aria
+          role: textbox
+          name: "New Todo"
+          confidence: 0.95
+        - strategy: css
+          selector: "input.new-todo"
+          confidence: 0.80
+      interaction:
+        type: text_input
+        steps:
+          - action: fill
+            target: self
+            value: "{{value}}"
+
+    - id: add_button
+      label: Add Todo
+      type: action_button
+      selectors:
+        - strategy: aria
+          role: button
+          name: "Add"
+          confidence: 0.95
+        - strategy: css
+          selector: "button.add-todo"
+          confidence: 0.80
+      interaction:
+        type: click
+
+  outputs:
+    - id: todo_items
+      label: Todo Items
+      selectors:
+        - strategy: css
+          selector: ".todo-item .todo-text"
+        - strategy: aria
+          role: listitem
+      capture_strategies:
+        - type: table
+          selectors:
+            - strategy: css
+              selector: ".todo-item"
+
+    - id: todo_count
+      label: Items Remaining
+      selectors:
+        - strategy: css
+          selector: ".todo-count"
+        - strategy: aria
+          role: status
+      capture_strategies:
+        - type: text_content
+          selectors:
+            - strategy: css
+              selector: ".todo-count"
+        - type: pattern_match
+          selectors:
+            - strategy: css
+              selector: ".todo-count"
+          pattern: "(\d+) items? left"
+          group: 1

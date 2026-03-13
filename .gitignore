@@ -1,0 +1,17 @@
+node_modules/
+dist/
+*.tsbuildinfo
+.env
+.env.local
+coverage/
+__pycache__/
+*.pyc
+*.egg-info/
+.venv/
+.pytest_cache/
+.ruff_cache/
+htmlcov/
+.DS_Store
+packages/extension/dist/
+tests/e2e/test-results/
+tests/e2e/playwright-report/

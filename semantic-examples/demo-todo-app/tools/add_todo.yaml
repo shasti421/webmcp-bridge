@@ -1,0 +1,37 @@
+# Tool: Add a todo item
+tool:
+  name: add_todo
+  description: >
+    Add a new todo item to the list. Types the text into the input
+    field and clicks the Add button. Returns the updated item count.
+  inputSchema:
+    type: object
+    properties:
+      text:
+        type: string
+        description: The todo item text to add
+    required: [text]
+  outputSchema:
+    type: object
+    properties:
+      item_count:
+        type: string
+        description: Number of items remaining after adding
+  bridge:
+    page: todo_list
+    steps:
+      - navigate:
+          page: todo_list
+      - interact:
+          field: todo_list.fields.new_todo_input
+          action: fill
+          value: "{{text}}"
+      - interact:
+          action: click
+          target: todo_list.fields.add_button
+      - capture:
+          from: todo_list.outputs.todo_count
+          store_as: item_count
+          wait: true
+    returns:
+      item_count: "{{item_count}}"
