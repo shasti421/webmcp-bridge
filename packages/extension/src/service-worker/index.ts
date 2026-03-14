@@ -195,10 +195,23 @@ export async function handleStartRecording(
   state: ServiceWorkerState,
   chromeApi: typeof chrome,
 ): Promise<void> {
-  const tabId = sender.tab?.id;
+  // Side panel doesn't have sender.tab — query the active tab instead
+  let tabId = sender.tab?.id;
+  let tabUrl = sender.tab?.url ?? '';
+
   if (tabId === undefined || tabId === null) {
-    sendResponse({ ok: false, error: 'No tab context' });
-    return;
+    try {
+      const [activeTab] = await chromeApi.tabs.query({ active: true, currentWindow: true });
+      if (!activeTab?.id) {
+        sendResponse({ ok: false, error: 'No active tab found' });
+        return;
+      }
+      tabId = activeTab.id;
+      tabUrl = activeTab.url ?? '';
+    } catch {
+      sendResponse({ ok: false, error: 'Failed to query active tab' });
+      return;
+    }
   }
 
   state.recordingSession = {
@@ -206,7 +219,7 @@ export async function handleStartRecording(
     tabId,
     startedAt: Date.now(),
     actions: [],
-    pages: [sender.tab?.url ?? ''],
+    pages: [tabUrl],
     status: 'recording',
   };
 
