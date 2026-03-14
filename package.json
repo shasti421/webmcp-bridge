@@ -21,6 +21,7 @@
     "prepare": "npm run build"
   },
   "devDependencies": {
+    "@aws-sdk/client-bedrock-runtime": "^3.1009.0",
     "@types/node": "^20.11.0",
     "@typescript-eslint/eslint-plugin": "^7.0.0",
     "@typescript-eslint/parser": "^7.0.0",
@@ -30,5 +31,8 @@
     "typescript": "^5.3.0",
     "vitest": "^1.2.0"
   },
-  "engines": { "node": ">=20.0.0", "npm": ">=10.0.0" }
+  "engines": {
+    "node": ">=20.0.0",
+    "npm": ">=10.0.0"
+  }
 }
