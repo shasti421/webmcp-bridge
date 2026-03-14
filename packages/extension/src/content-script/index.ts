@@ -12,7 +12,11 @@
  * - Communicates with service worker via chrome.runtime.sendMessage
  * - MutationObserver watches for significant DOM changes (not every mutation)
  * - Debounce DOM change notifications (500ms default)
+ * - Recording: activates Recorder for Walk & Capture AI assistant
  */
+
+export { initRecorder } from './recorder.js';
+export type { RecordedAction, ElementContext } from './recorder.js';
 
 // ─── Types ──────────────────────────────────────────────
 
