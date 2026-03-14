@@ -32,7 +32,6 @@ import type {
   WaitCondition,
   EventOpts,
 } from '@webmcp-bridge/core';
-
 import type { Page, Browser, BrowserContext, Locator } from 'playwright';
 
 // Internal interface to carry the Playwright Locator inside an ElementHandle
@@ -106,14 +105,29 @@ export class PlaywrightDriver implements BridgeDriver {
           const handle = await this.page.evaluateHandle(strategy.expression);
           const element = handle.asElement();
           if (element) {
-            // Convert ElementHandle to a locator-like wrapper
-            // We use page.locator with a JS expression
-            const locator = this.page.locator(`js=${strategy.expression}`).first();
+            // Try locator approach first (works for simple expressions)
             try {
-              await locator.waitFor({ state: 'attached', timeout: 5000 });
+              const locator = this.page.locator(`js=${strategy.expression}`).first();
+              await locator.waitFor({ state: 'attached', timeout: 3000 });
               return wrapLocator(locator);
             } catch {
-              // If locator approach fails, fall through
+              // For complex expressions (IIFEs), generate a unique data attribute
+              // and use that to create a stable locator
+              const uid = `webmcp-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+              await this.page.evaluate(
+                ([expr, id]) => {
+                  const el = eval(expr);
+                  if (el && el.setAttribute) el.setAttribute('data-webmcp-ref', id);
+                },
+                [strategy.expression, uid] as [string, string],
+              );
+              const locator = this.page.locator(`[data-webmcp-ref="${uid}"]`).first();
+              try {
+                await locator.waitFor({ state: 'attached', timeout: 3000 });
+                return wrapLocator(locator);
+              } catch {
+                // Clean up and fall through
+              }
             }
           }
           continue;

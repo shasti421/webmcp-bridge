@@ -3,10 +3,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ResultCapturer } from '../result-capturer.js';
 import { SelectorResolver } from '../../selector/selector-resolver.js';
 import { createMockDriver } from '../../drivers/mock-driver.js';
-import type { BridgeDriver, ElementHandle } from '../../types/bridge-driver.js';
-import type { OutputDefinition, CaptureStrategy } from '../../types/semantic-model.js';
-import { ok, err } from '../../types/result.js';
-import { createBridgeError } from '../../types/errors.js';
+import type { BridgeDriver } from '../../types/bridge-driver.js';
+import type { OutputDefinition } from '../../types/semantic-model.js';
 
 function makeOutput(overrides: Partial<OutputDefinition> = {}): OutputDefinition {
   return {

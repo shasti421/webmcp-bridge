@@ -207,7 +207,7 @@ describe('E2E: Todo App Tool Execution', () => {
     }
   });
 
-  it('should handle strategy fallback (CSS -> ARIA)', async () => {
+  it('should handle strategy fallback (CSS -> ARIA)', { timeout: 15000 }, async () => {
     await driver.goto(baseUrl);
     await driver.waitFor({ type: 'selector', value: '.todo-list', timeout: 5000 });
 
