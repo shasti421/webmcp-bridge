@@ -15,6 +15,7 @@
  * - Recording: activates Recorder for Walk & Capture AI assistant
  */
 
+import { initRecorder } from './recorder.js';
 export { initRecorder } from './recorder.js';
 export type { RecordedAction, ElementContext } from './recorder.js';
 
@@ -221,4 +222,21 @@ export function setupDomObserver(deps: ContentScriptDeps, debounceMs = 500): () 
     }
     observer.disconnect();
   };
+}
+
+// ─── Bootstrap ──────────────────────────────────────────
+// Auto-initialize when Chrome injects this content script.
+// Guard: only run in browser with chrome.runtime (not in test environment).
+
+if (typeof globalThis.chrome !== 'undefined' && globalThis.chrome?.runtime?.sendMessage) {
+  const deps: ContentScriptDeps = {
+    chrome: globalThis.chrome,
+    window: globalThis.window,
+    document: globalThis.document,
+  };
+
+  setupPageNavigationDetection(deps);
+  setupDomObserver(deps);
+  notifyPageChange(deps);
+  initRecorder();
 }

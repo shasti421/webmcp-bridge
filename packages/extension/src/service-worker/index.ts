@@ -361,3 +361,11 @@ export function initServiceWorker(chromeApi: typeof chrome): ServiceWorkerState 
 
   return state;
 }
+
+// ─── Bootstrap ──────────────────────────────────────────
+// Auto-initialize when Chrome loads this service worker.
+// Guard: only run in browser with chrome.runtime (not in test environment).
+
+if (typeof globalThis.chrome !== 'undefined' && globalThis.chrome?.runtime?.onMessage) {
+  initServiceWorker(globalThis.chrome);
+}
