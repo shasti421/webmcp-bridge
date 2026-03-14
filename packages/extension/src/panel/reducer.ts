@@ -2,6 +2,27 @@
  * Side Panel state management via useReducer.
  */
 
+import type { RecordedAction, ElementContext } from '../content-script/recorder.js';
+
+export type { RecordedAction, ElementContext };
+
+// ─── Recording Types ────────────────────────────────────
+
+export interface RecordingSessionState {
+  id: string;
+  startedAt: number;
+  actions: RecordedAction[];
+  pages: string[];
+  status: 'recording' | 'analyzing' | 'complete' | 'error';
+}
+
+export interface GeneratedDefinitions {
+  pages: Array<Record<string, unknown>>;
+  tools: Array<Record<string, unknown>>;
+  workflows: Array<Record<string, unknown>>;
+  suggestions: string[];
+}
+
 // ─── Types ──────────────────────────────────────────────
 
 export interface ToolSchema {
@@ -20,8 +41,29 @@ export interface ExecutionResult {
   error?: string;
 }
 
+export interface CapturedElement {
+  id: string;
+  tag: string;
+  type?: string;
+  ariaLabel?: string;
+  text?: string;
+  xPath: string;
+  cssSelector?: string;
+  label?: string;
+  shadowPath?: string;
+  href?: string;
+  value?: string;
+}
+
+export interface CaptureSnapshot {
+  url: string;
+  title: string;
+  elements: CapturedElement[];
+  timestamp: number;
+}
+
 export interface SidePanelState {
-  mode: 'capture' | 'execute';
+  mode: 'capture' | 'execute' | 'record';
   tools: ToolSchema[];
   suggestedTools: ToolSchema[];
   currentPageUrl: string;
@@ -32,12 +74,16 @@ export interface SidePanelState {
   loading: boolean;
   capturing: boolean;
   error: string | null;
+  snapshot: CaptureSnapshot | null;
+  // Recording state
+  recordingSession: RecordingSessionState | null;
+  generatedDefinitions: GeneratedDefinitions | null;
 }
 
 // ─── Actions ────────────────────────────────────────────
 
 export type SidePanelAction =
-  | { type: 'SWITCH_MODE'; mode: 'capture' | 'execute' }
+  | { type: 'SWITCH_MODE'; mode: 'capture' | 'execute' | 'record' }
   | { type: 'SET_TOOLS'; payload: ToolSchema[] }
   | { type: 'SET_SUGGESTED_TOOLS'; payload: ToolSchema[] }
   | { type: 'UPDATE_PAGE'; payload: { url: string; title: string } }
@@ -48,7 +94,15 @@ export type SidePanelAction =
   | { type: 'SET_LOADING'; payload: boolean }
   | { type: 'SET_CAPTURING'; payload: boolean }
   | { type: 'SET_ERROR'; payload: string }
-  | { type: 'CLEAR_ERROR' };
+  | { type: 'CLEAR_ERROR' }
+  | { type: 'SET_SNAPSHOT'; payload: CaptureSnapshot }
+  // Recording actions
+  | { type: 'START_RECORDING'; payload: { id: string; startedAt: number } }
+  | { type: 'STOP_RECORDING' }
+  | { type: 'ACTION_RECEIVED'; payload: RecordedAction }
+  | { type: 'SET_ANALYZING' }
+  | { type: 'SET_GENERATED'; payload: GeneratedDefinitions }
+  | { type: 'CLEAR_RECORDING' };
 
 // ─── Initial state ──────────────────────────────────────
 
@@ -64,6 +118,9 @@ export const initialState: SidePanelState = {
   loading: false,
   capturing: false,
   error: null,
+  snapshot: null,
+  recordingSession: null,
+  generatedDefinitions: null,
 };
 
 // ─── Reducer ────────────────────────────────────────────
@@ -123,6 +180,70 @@ export function sidePanelReducer(state: SidePanelState, action: SidePanelAction)
 
     case 'CLEAR_ERROR':
       return { ...state, error: null };
+
+    case 'SET_SNAPSHOT':
+      return { ...state, snapshot: action.payload, capturing: false };
+
+    // ── Recording ──────────────────────────────────────
+    case 'START_RECORDING':
+      return {
+        ...state,
+        mode: 'record' as const,
+        recordingSession: {
+          id: action.payload.id,
+          startedAt: action.payload.startedAt,
+          actions: [],
+          pages: [state.currentPageUrl],
+          status: 'recording',
+        },
+        generatedDefinitions: null,
+        error: null,
+      };
+
+    case 'STOP_RECORDING':
+      if (!state.recordingSession) return state;
+      return {
+        ...state,
+        recordingSession: { ...state.recordingSession, status: 'analyzing' },
+      };
+
+    case 'ACTION_RECEIVED':
+      if (!state.recordingSession || state.recordingSession.status !== 'recording') return state;
+      return {
+        ...state,
+        recordingSession: {
+          ...state.recordingSession,
+          actions: [...state.recordingSession.actions, action.payload],
+          pages: action.payload.url && !state.recordingSession.pages.includes(action.payload.url)
+            ? [...state.recordingSession.pages, action.payload.url]
+            : state.recordingSession.pages,
+        },
+      };
+
+    case 'SET_ANALYZING':
+      if (!state.recordingSession) return state;
+      return {
+        ...state,
+        recordingSession: { ...state.recordingSession, status: 'analyzing' },
+        loading: true,
+      };
+
+    case 'SET_GENERATED':
+      return {
+        ...state,
+        recordingSession: state.recordingSession
+          ? { ...state.recordingSession, status: 'complete' }
+          : null,
+        generatedDefinitions: action.payload,
+        loading: false,
+      };
+
+    case 'CLEAR_RECORDING':
+      return {
+        ...state,
+        recordingSession: null,
+        generatedDefinitions: null,
+      };
 
     default:
       return state;

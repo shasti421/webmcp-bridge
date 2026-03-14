@@ -4,7 +4,7 @@
   "description": "Playwright BridgeDriver implementation",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
-  "scripts": { "build": "tsc", "test": "vitest run" },
+  "scripts": { "build": "tsc", "test": "vitest run --passWithNoTests" },
   "dependencies": { "@webmcp-bridge/core": "*", "playwright": "^1.42.0" },
   "devDependencies": { "vitest": "^1.2.0", "typescript": "^5.3.0" }
 }

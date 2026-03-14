@@ -318,24 +318,51 @@ export class ExecutionEngine {
 
     const renderedUrl = this.templateRenderer.render(urlTemplate, renderVars);
 
-    try {
-      await driver.goto(renderedUrl);
-    } catch (e: unknown) {
-      return err(createBridgeError(
-        'NAVIGATION_FAILED',
-        `Failed to navigate to ${renderedUrl}: ${e instanceof Error ? e.message : String(e)}`,
-        'engine',
-      ));
+    // Skip navigation if URL has unrendered templates or we're already on the right page
+    const hasUnrenderedTemplate = renderedUrl.includes('{{');
+    let didNavigate = false;
+
+    if (hasUnrenderedTemplate) {
+      // URL couldn't be fully rendered (missing variable) — skip navigation.
+      // Assume we're already on the right page (reached by prior step or script).
+    } else {
+      // URL is fully rendered — navigate if not already there
+      try {
+        const currentContext = await driver.getPageContext();
+        const currentPath = new URL(currentContext.url).pathname;
+        const targetPath = (() => {
+          try { return new URL(renderedUrl).pathname; } catch { return renderedUrl; }
+        })();
+
+        if (currentPath !== targetPath) {
+          await driver.goto(renderedUrl);
+          didNavigate = true;
+        }
+      } catch {
+        try {
+          await driver.goto(renderedUrl);
+          didNavigate = true;
+        } catch (navErr: unknown) {
+          return err(createBridgeError(
+            'NAVIGATION_FAILED',
+            `Failed to navigate to ${renderedUrl}: ${navErr instanceof Error ? navErr.message : String(navErr)}`,
+            'engine',
+          ));
+        }
+      }
     }
 
-    try {
-      await driver.waitFor({ type: 'selector', value: page.wait_for, timeout: 30000 });
-    } catch {
-      return err(createBridgeError(
-        'NAVIGATION_TIMEOUT',
-        `Timeout waiting for page ready: ${page.wait_for}`,
-        'engine',
-      ));
+    // Only wait for page ready if we actually navigated
+    if (didNavigate) {
+      try {
+        await driver.waitFor({ type: 'selector', value: page.wait_for, timeout: 30000 });
+      } catch {
+        return err(createBridgeError(
+          'NAVIGATION_TIMEOUT',
+          `Timeout waiting for page ready: ${page.wait_for}`,
+          'engine',
+        ));
+      }
     }
 
     return ok({});
@@ -346,15 +373,18 @@ export class ExecutionEngine {
     context: ExecutionContext,
     driver: BridgeDriver,
   ): Promise<Result<{ capturedValue?: unknown; captureKey?: string }, BridgeError>> {
-    const fieldRef = interact.field ?? interact.target;
+    const rawFieldRef = interact.field ?? interact.target;
 
-    if (!fieldRef) {
+    if (!rawFieldRef) {
       return err(createBridgeError(
         'SELECTOR_NOT_FOUND',
         'No field or target specified in interact step',
         'engine',
       ));
     }
+
+    // Template-render the field reference (e.g. "page.fields.status_{{status}}")
+    const fieldRef = this.templateRenderer.render(rawFieldRef, context.variables);
 
     const renderedValue = interact.value
       ? this.templateRenderer.render(interact.value, context.variables)

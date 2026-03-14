@@ -6,6 +6,9 @@ import {
   handleExecuteTool,
   handleGetTools,
   handleGetConfig,
+  handleStartRecording,
+  handleStopRecording,
+  handleActionRecorded,
   createServiceWorkerMessageRouter,
   type ServiceWorkerState,
 } from '../index.js';
@@ -76,6 +79,7 @@ describe('Service Worker', () => {
       config: {
         bridgeApiUrl: 'http://localhost:3000',
       },
+      recordingSession: null,
     };
   });
 
@@ -296,6 +300,160 @@ describe('Service Worker', () => {
 
       router({ type: 'UNKNOWN_TYPE', payload: {} }, sender, sendResponse);
       expect(sendResponse).not.toHaveBeenCalled();
+    });
+
+    it('routes START_RECORDING and returns true for async', () => {
+      mockChrome.tabs = { sendMessage: vi.fn().mockResolvedValue({ ok: true }) } as unknown as typeof mockChrome.tabs;
+      const router = createServiceWorkerMessageRouter(state, mockChrome as unknown as typeof chrome);
+      const sender = createMockSender(1);
+      const sendResponse = vi.fn();
+
+      const result = router({ type: 'START_RECORDING', payload: {} }, sender, sendResponse);
+      expect(result).toBe(true);
+    });
+
+    it('routes STOP_RECORDING and returns true for async', () => {
+      const router = createServiceWorkerMessageRouter(state, mockChrome as unknown as typeof chrome);
+      const sender = createMockSender(1);
+      const sendResponse = vi.fn();
+
+      const result = router({ type: 'STOP_RECORDING', payload: {} }, sender, sendResponse);
+      expect(result).toBe(true);
+    });
+  });
+
+  describe('handleStartRecording', () => {
+    it('creates a recording session', async () => {
+      mockChrome.tabs = { sendMessage: vi.fn().mockResolvedValue({ ok: true }) } as unknown as typeof mockChrome.tabs;
+      const sender = createMockSender(1);
+      const sendResponse = vi.fn();
+
+      await handleStartRecording(sender, sendResponse, state, mockChrome as unknown as typeof chrome);
+
+      expect(state.recordingSession).not.toBeNull();
+      expect(state.recordingSession!.tabId).toBe(1);
+      expect(state.recordingSession!.status).toBe('recording');
+      expect(sendResponse).toHaveBeenCalledWith(expect.objectContaining({ ok: true }));
+    });
+
+    it('sends START_RECORDING to content script', async () => {
+      mockChrome.tabs = { sendMessage: vi.fn().mockResolvedValue({ ok: true }) } as unknown as typeof mockChrome.tabs;
+      const sender = createMockSender(42);
+      const sendResponse = vi.fn();
+
+      await handleStartRecording(sender, sendResponse, state, mockChrome as unknown as typeof chrome);
+
+      expect((mockChrome.tabs as unknown as { sendMessage: ReturnType<typeof vi.fn> }).sendMessage)
+        .toHaveBeenCalledWith(42, { type: 'START_RECORDING' });
+    });
+
+    it('fails without tab context', async () => {
+      const sender = { tab: undefined, id: 'ext' } as chrome.runtime.MessageSender;
+      const sendResponse = vi.fn();
+
+      await handleStartRecording(sender, sendResponse, state, mockChrome as unknown as typeof chrome);
+
+      expect(sendResponse).toHaveBeenCalledWith(expect.objectContaining({ ok: false }));
+    });
+  });
+
+  describe('handleStopRecording', () => {
+    it('stops an active session', async () => {
+      mockChrome.tabs = { sendMessage: vi.fn().mockResolvedValue({}) } as unknown as typeof mockChrome.tabs;
+      state.recordingSession = {
+        id: 'test',
+        tabId: 1,
+        startedAt: Date.now(),
+        actions: [],
+        pages: ['https://example.com'],
+        status: 'recording',
+      };
+      const sendResponse = vi.fn();
+
+      await handleStopRecording(sendResponse, state, mockChrome as unknown as typeof chrome);
+
+      expect(sendResponse).toHaveBeenCalledWith(expect.objectContaining({ ok: true }));
+      expect(state.recordingSession).toBeNull();
+    });
+
+    it('fails when no session active', async () => {
+      const sendResponse = vi.fn();
+
+      await handleStopRecording(sendResponse, state, mockChrome as unknown as typeof chrome);
+
+      expect(sendResponse).toHaveBeenCalledWith(expect.objectContaining({ ok: false }));
+    });
+  });
+
+  describe('handleActionRecorded', () => {
+    it('buffers action in session', () => {
+      state.recordingSession = {
+        id: 'test',
+        tabId: 1,
+        startedAt: Date.now(),
+        actions: [],
+        pages: ['https://example.com'],
+        status: 'recording',
+      };
+
+      handleActionRecorded(
+        { type: 'click', url: 'https://example.com', timestamp: Date.now() },
+        state,
+        mockChrome as unknown as typeof chrome,
+      );
+
+      expect(state.recordingSession.actions.length).toBe(1);
+    });
+
+    it('tracks unique pages', () => {
+      state.recordingSession = {
+        id: 'test',
+        tabId: 1,
+        startedAt: Date.now(),
+        actions: [],
+        pages: ['https://example.com'],
+        status: 'recording',
+      };
+
+      handleActionRecorded(
+        { type: 'navigate', url: 'https://example.com/page2', timestamp: Date.now() },
+        state,
+        mockChrome as unknown as typeof chrome,
+      );
+
+      expect(state.recordingSession.pages).toContain('https://example.com/page2');
+    });
+
+    it('forwards action to panel', () => {
+      state.recordingSession = {
+        id: 'test',
+        tabId: 1,
+        startedAt: Date.now(),
+        actions: [],
+        pages: [],
+        status: 'recording',
+      };
+
+      handleActionRecorded(
+        { type: 'click', url: 'https://example.com', timestamp: Date.now() },
+        state,
+        mockChrome as unknown as typeof chrome,
+      );
+
+      expect(mockChrome.runtime.sendMessage).toHaveBeenCalledWith(
+        expect.objectContaining({ type: 'ACTION_STREAM' }),
+      );
+    });
+
+    it('ignores actions when not recording', () => {
+      handleActionRecorded(
+        { type: 'click', url: 'https://example.com', timestamp: Date.now() },
+        state,
+        mockChrome as unknown as typeof chrome,
+      );
+
+      // No session, should not throw or modify anything
+      expect(state.recordingSession).toBeNull();
     });
   });
 });

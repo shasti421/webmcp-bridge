@@ -41,10 +41,20 @@ export interface ServiceWorkerConfig {
   bridgeApiUrl: string;
 }
 
+export interface RecordingSession {
+  id: string;
+  tabId: number;
+  startedAt: number;
+  actions: Array<Record<string, unknown>>;
+  pages: string[];
+  status: 'recording' | 'stopped';
+}
+
 export interface ServiceWorkerState {
   tabContexts: Map<number, TabContext>;
   toolDefinitions: ToolDefinition[];
   config: ServiceWorkerConfig;
+  recordingSession: RecordingSession | null;
 }
 
 export interface ExtensionMessage {
@@ -54,7 +64,15 @@ export interface ExtensionMessage {
 
 // ─── Message payload types ──────────────────────────────
 
-type MessageType = 'PAGE_DETECTED' | 'DOM_SNAPSHOT' | 'EXECUTE_TOOL' | 'GET_TOOLS' | 'GET_CONFIG';
+type MessageType =
+  | 'PAGE_DETECTED'
+  | 'DOM_SNAPSHOT'
+  | 'EXECUTE_TOOL'
+  | 'GET_TOOLS'
+  | 'GET_CONFIG'
+  | 'START_RECORDING'
+  | 'STOP_RECORDING'
+  | 'ACTION_RECORDED';
 
 interface PageDetectedPayload {
   url: string;
@@ -169,6 +187,87 @@ export function handleGetConfig(
   sendResponse({ config: state.config });
 }
 
+// ─── Recording Handlers ─────────────────────────────────
+
+export async function handleStartRecording(
+  sender: chrome.runtime.MessageSender,
+  sendResponse: (response: unknown) => void,
+  state: ServiceWorkerState,
+  chromeApi: typeof chrome,
+): Promise<void> {
+  const tabId = sender.tab?.id;
+  if (tabId === undefined || tabId === null) {
+    sendResponse({ ok: false, error: 'No tab context' });
+    return;
+  }
+
+  state.recordingSession = {
+    id: `rec_${Date.now()}`,
+    tabId,
+    startedAt: Date.now(),
+    actions: [],
+    pages: [sender.tab?.url ?? ''],
+    status: 'recording',
+  };
+
+  // Tell content script to start recording
+  try {
+    await chromeApi.tabs.sendMessage(tabId, { type: 'START_RECORDING' });
+    sendResponse({ ok: true, sessionId: state.recordingSession.id });
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    sendResponse({ ok: false, error: message });
+  }
+}
+
+export async function handleStopRecording(
+  sendResponse: (response: unknown) => void,
+  state: ServiceWorkerState,
+  chromeApi: typeof chrome,
+): Promise<void> {
+  if (!state.recordingSession) {
+    sendResponse({ ok: false, error: 'No active recording' });
+    return;
+  }
+
+  const session = state.recordingSession;
+  session.status = 'stopped';
+
+  // Tell content script to stop recording
+  try {
+    await chromeApi.tabs.sendMessage(session.tabId, { type: 'STOP_RECORDING' });
+  } catch {
+    // Content script may have navigated away
+  }
+
+  sendResponse({ ok: true, session });
+  state.recordingSession = null;
+}
+
+export function handleActionRecorded(
+  payload: Record<string, unknown>,
+  state: ServiceWorkerState,
+  chromeApi: typeof chrome,
+): void {
+  if (!state.recordingSession || state.recordingSession.status !== 'recording') return;
+
+  state.recordingSession.actions.push(payload);
+
+  // Track unique pages
+  const url = payload['url'] as string;
+  if (url && !state.recordingSession.pages.includes(url)) {
+    state.recordingSession.pages.push(url);
+  }
+
+  // Forward to side panel
+  chromeApi.runtime.sendMessage({
+    type: 'ACTION_STREAM',
+    payload,
+  }).catch(() => {
+    // Panel might not be open
+  });
+}
+
 // ─── Message Router ─────────────────────────────────────
 
 export function createServiceWorkerMessageRouter(
@@ -217,6 +316,18 @@ export function createServiceWorkerMessageRouter(
         handleGetConfig(sendResponse, state);
         break;
 
+      case 'START_RECORDING':
+        void handleStartRecording(sender, sendResponse, state, chromeApi);
+        return true; // async
+
+      case 'STOP_RECORDING':
+        void handleStopRecording(sendResponse, state, chromeApi);
+        return true; // async
+
+      case 'ACTION_RECORDED':
+        handleActionRecorded(message.payload, state, chromeApi);
+        break;
+
       default:
         // Unknown message type — ignore
         break;
@@ -233,6 +344,7 @@ export function initServiceWorker(chromeApi: typeof chrome): ServiceWorkerState 
     config: {
       bridgeApiUrl: 'http://localhost:3000',
     },
+    recordingSession: null,
   };
 
   const router = createServiceWorkerMessageRouter(state, chromeApi);

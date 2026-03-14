@@ -8,6 +8,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@aws-sdk/client-bedrock-runtime": "^3.1009.0",
     "@webmcp-bridge/core": "*",
     "react": "^18.2.0",
     "react-dom": "^18.2.0"
