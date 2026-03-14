@@ -253,8 +253,10 @@ export function RecordMode({ state, dispatch }: Props) {
 
   // Start recording
   const handleStart = useCallback(async () => {
+    console.log('[RecordMode] Starting recording...');
     try {
       const response = await chrome.runtime.sendMessage({ type: 'START_RECORDING', payload: {} });
+      console.log('[RecordMode] START_RECORDING response:', response);
       if (response?.ok) {
         dispatch({
           type: 'START_RECORDING',
@@ -264,6 +266,7 @@ export function RecordMode({ state, dispatch }: Props) {
         dispatch({ type: 'SET_ERROR', payload: response?.error || 'Failed to start recording' });
       }
     } catch (err) {
+      console.error('[RecordMode] START_RECORDING error:', err);
       dispatch({ type: 'SET_ERROR', payload: `Recording error: ${err}` });
     }
   }, [dispatch]);
@@ -301,6 +304,21 @@ export function RecordMode({ state, dispatch }: Props) {
         <p style={{ color: '#666', fontSize: '12px', margin: '0 0 16px' }}>
           Record your workflow and let AI generate semantic definitions automatically.
         </p>
+        {state.error && (
+          <div style={{
+            background: '#f8d7da',
+            color: '#721c24',
+            border: '1px solid #f5c6cb',
+            borderRadius: '4px',
+            padding: '8px 12px',
+            marginBottom: '12px',
+            fontSize: '12px',
+            textAlign: 'left',
+            wordBreak: 'break-word',
+          }}>
+            {state.error}
+          </div>
+        )}
         <button
           onClick={handleStart}
           style={{

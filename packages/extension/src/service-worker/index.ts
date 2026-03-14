@@ -223,7 +223,19 @@ export async function handleStartRecording(
     status: 'recording',
   };
 
-  // Tell content script to start recording
+  // Inject content script if not already present, then start recording
+  try {
+    await chromeApi.scripting.executeScript({
+      target: { tabId },
+      files: ['content-script.js'],
+    });
+  } catch {
+    // Already injected or injection failed — try sending anyway
+  }
+
+  // Small delay to let the content script initialize
+  await new Promise(resolve => setTimeout(resolve, 100));
+
   try {
     await chromeApi.tabs.sendMessage(tabId, { type: 'START_RECORDING' });
     sendResponse({ ok: true, sessionId: state.recordingSession.id });
