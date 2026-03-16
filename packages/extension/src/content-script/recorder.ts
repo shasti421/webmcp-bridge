@@ -676,36 +676,33 @@ export class Recorder {
   }
 
   private hookNavigation(): void {
-    const self = this;
     const originalPush = history.pushState;
     const originalReplace = history.replaceState;
+    const emitNavigationIfNeeded = (from: string, to: string): void => {
+      if (from !== to && this.recording) {
+        this.emitNavigation(from, to);
+        this.lastUrl = to;
+      }
+    };
 
     history.pushState = function (...args: Parameters<typeof history.pushState>) {
       const from = window.location.href;
       originalPush.apply(this, args);
-      const to = window.location.href;
-      if (from !== to && self.recording) {
-        self.emitNavigation(from, to);
-        self.lastUrl = to;
-      }
+      emitNavigationIfNeeded(from, window.location.href);
     };
 
     history.replaceState = function (...args: Parameters<typeof history.replaceState>) {
       const from = window.location.href;
       originalReplace.apply(this, args);
-      const to = window.location.href;
-      if (from !== to && self.recording) {
-        self.emitNavigation(from, to);
-        self.lastUrl = to;
-      }
+      emitNavigationIfNeeded(from, window.location.href);
     };
 
     window.addEventListener('popstate', () => {
-      if (!self.recording) return;
+      if (!this.recording) return;
       const newUrl = window.location.href;
-      if (newUrl !== self.lastUrl) {
-        self.emitNavigation(self.lastUrl, newUrl);
-        self.lastUrl = newUrl;
+      if (newUrl !== this.lastUrl) {
+        this.emitNavigation(this.lastUrl, newUrl);
+        this.lastUrl = newUrl;
       }
     });
   }

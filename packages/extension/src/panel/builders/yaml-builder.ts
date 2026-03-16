@@ -781,8 +781,7 @@ export function buildToolDefinition(
     const pageDef = pageDefinitions.find(def => def.page.id === pageId) || null;
     const filterIntent = isFilterIntent(meta);
     const quickFilterSupported = supportsQuickFilters(pageDef);
-
-    function getResolvedField(): { fieldRef: string; field: ResolvedFieldMatch } | null {
+    const getResolvedField = (): { fieldRef: string; field: ResolvedFieldMatch } | null => {
       const field = resolveFieldForAction(action, snapshot, pageDef);
       if (!field) {
         return null;
@@ -791,7 +790,7 @@ export function buildToolDefinition(
         fieldRef: `${currentPageId || pageId || 'page'}.fields.${field.id}`,
         field,
       };
-    }
+    };
 
     // Emit step for EVERY recorded action
     switch (action.type) {
@@ -884,7 +883,6 @@ export function buildToolDefinition(
       }
 
       case 'keypress': {
-        const key = action.metadata?.key as string || 'unknown';
         // Add as a comment-like wait step (keypress not directly supported in schema)
         steps.push({ wait: 500 });
         break;

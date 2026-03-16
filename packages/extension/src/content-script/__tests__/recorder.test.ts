@@ -2,8 +2,8 @@
  * @vitest-environment jsdom
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { Recorder } from '../recorder.js';
-import type { RecordedAction } from '../recorder.js';
+
+import { Recorder, type RecordedAction } from '../recorder.js';
 
 // ─── Mock chrome API ────────────────────────────────────
 

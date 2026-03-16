@@ -274,7 +274,7 @@ export function sidePanelReducer(state: SidePanelState, action: SidePanelAction)
         loading: false,
       };
 
-    case 'PAGE_SNAPSHOT_CAPTURED':
+    case 'PAGE_SNAPSHOT_CAPTURED': {
       if (!state.recordingSession) return state;
       const snapshotKey = `${action.payload.url}#${action.payload.snapshot.timestamp}`;
       return {
@@ -287,6 +287,7 @@ export function sidePanelReducer(state: SidePanelState, action: SidePanelAction)
           },
         },
       };
+    }
 
     case 'CLEAR_RECORDING':
       return {
