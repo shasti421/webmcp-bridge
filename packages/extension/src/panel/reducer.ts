@@ -14,6 +14,8 @@ export interface RecordingSessionState {
   actions: RecordedAction[];
   pages: string[];
   status: 'recording' | 'analyzing' | 'complete' | 'error';
+  /** Timestamped capture snapshots keyed by capture id — real selectors from page scan */
+  pageSnapshots: Record<string, CaptureSnapshot>;
 }
 
 export interface GeneratedDefinitions {
@@ -62,8 +64,27 @@ export interface CaptureSnapshot {
   timestamp: number;
 }
 
+// ─── Guide Chat Types ──────────────────────────────────
+
+export interface ChatMessage {
+  id: string;
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+  timestamp: number;
+  /** DOM snapshot attached to this message (user messages only) */
+  snapshot?: { url: string; elements: number };
+}
+
+export interface GuideState {
+  messages: ChatMessage[];
+  loading: boolean;
+  /** Accumulated definitions built during the guided session */
+  definitions: GeneratedDefinitions | null;
+  sessionId: string;
+}
+
 export interface SidePanelState {
-  mode: 'capture' | 'execute' | 'record';
+  mode: 'capture' | 'execute' | 'record' | 'guide';
   tools: ToolSchema[];
   suggestedTools: ToolSchema[];
   currentPageUrl: string;
@@ -78,12 +99,14 @@ export interface SidePanelState {
   // Recording state
   recordingSession: RecordingSessionState | null;
   generatedDefinitions: GeneratedDefinitions | null;
+  // Guide chat state
+  guide: GuideState;
 }
 
 // ─── Actions ────────────────────────────────────────────
 
 export type SidePanelAction =
-  | { type: 'SWITCH_MODE'; mode: 'capture' | 'execute' | 'record' }
+  | { type: 'SWITCH_MODE'; mode: 'capture' | 'execute' | 'record' | 'guide' }
   | { type: 'SET_TOOLS'; payload: ToolSchema[] }
   | { type: 'SET_SUGGESTED_TOOLS'; payload: ToolSchema[] }
   | { type: 'UPDATE_PAGE'; payload: { url: string; title: string } }
@@ -102,7 +125,13 @@ export type SidePanelAction =
   | { type: 'ACTION_RECEIVED'; payload: RecordedAction }
   | { type: 'SET_ANALYZING' }
   | { type: 'SET_GENERATED'; payload: GeneratedDefinitions }
-  | { type: 'CLEAR_RECORDING' };
+  | { type: 'CLEAR_RECORDING' }
+  | { type: 'PAGE_SNAPSHOT_CAPTURED'; payload: { url: string; snapshot: CaptureSnapshot } }
+  // Guide chat actions
+  | { type: 'GUIDE_ADD_USER_MESSAGE'; payload: { content: string; snapshot?: { url: string; elements: number } } }
+  | { type: 'GUIDE_ADD_ASSISTANT_MESSAGE'; payload: { content: string; definitions?: GeneratedDefinitions } }
+  | { type: 'GUIDE_SET_LOADING'; payload: boolean }
+  | { type: 'GUIDE_CLEAR' };
 
 // ─── Initial state ──────────────────────────────────────
 
@@ -121,6 +150,12 @@ export const initialState: SidePanelState = {
   snapshot: null,
   recordingSession: null,
   generatedDefinitions: null,
+  guide: {
+    messages: [],
+    loading: false,
+    definitions: null,
+    sessionId: `guide_${Date.now()}`,
+  },
 };
 
 // ─── Reducer ────────────────────────────────────────────
@@ -195,6 +230,7 @@ export function sidePanelReducer(state: SidePanelState, action: SidePanelAction)
           actions: [],
           pages: [state.currentPageUrl],
           status: 'recording',
+          pageSnapshots: {},
         },
         generatedDefinitions: null,
         error: null,
@@ -238,11 +274,81 @@ export function sidePanelReducer(state: SidePanelState, action: SidePanelAction)
         loading: false,
       };
 
+    case 'PAGE_SNAPSHOT_CAPTURED':
+      if (!state.recordingSession) return state;
+      const snapshotKey = `${action.payload.url}#${action.payload.snapshot.timestamp}`;
+      return {
+        ...state,
+        recordingSession: {
+          ...state.recordingSession,
+          pageSnapshots: {
+            ...state.recordingSession.pageSnapshots,
+            [snapshotKey]: action.payload.snapshot,
+          },
+        },
+      };
+
     case 'CLEAR_RECORDING':
       return {
         ...state,
         recordingSession: null,
         generatedDefinitions: null,
+      };
+
+    // ── Guide Chat ───────────────────────────────────────
+
+    case 'GUIDE_ADD_USER_MESSAGE':
+      return {
+        ...state,
+        guide: {
+          ...state.guide,
+          messages: [
+            ...state.guide.messages,
+            {
+              id: `msg_${Date.now()}`,
+              role: 'user',
+              content: action.payload.content,
+              timestamp: Date.now(),
+              snapshot: action.payload.snapshot,
+            },
+          ],
+        },
+      };
+
+    case 'GUIDE_ADD_ASSISTANT_MESSAGE':
+      return {
+        ...state,
+        guide: {
+          ...state.guide,
+          messages: [
+            ...state.guide.messages,
+            {
+              id: `msg_${Date.now()}`,
+              role: 'assistant',
+              content: action.payload.content,
+              timestamp: Date.now(),
+            },
+          ],
+          loading: false,
+          definitions: action.payload.definitions ?? state.guide.definitions,
+        },
+      };
+
+    case 'GUIDE_SET_LOADING':
+      return {
+        ...state,
+        guide: { ...state.guide, loading: action.payload },
+      };
+
+    case 'GUIDE_CLEAR':
+      return {
+        ...state,
+        guide: {
+          messages: [],
+          loading: false,
+          definitions: null,
+          sessionId: `guide_${Date.now()}`,
+        },
       };
 
     default:

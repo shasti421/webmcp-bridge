@@ -134,14 +134,17 @@ export function captureDomSnapshot(doc: Document): DomSnapshot {
 // ─── Page change notification ───────────────────────────
 
 export function notifyPageChange(deps: ContentScriptDeps): void {
-  deps.chrome.runtime.sendMessage({
-    type: 'PAGE_DETECTED',
-    payload: {
-      url: deps.window.location.href,
-      title: deps.document.title,
-      timestamp: Date.now(),
-    },
-  });
+  if (!deps.chrome.runtime?.id) return;
+  try {
+    deps.chrome.runtime.sendMessage({
+      type: 'PAGE_DETECTED',
+      payload: {
+        url: deps.window.location.href,
+        title: deps.document.title,
+        timestamp: Date.now(),
+      },
+    }).catch(() => {});
+  } catch { /* Extension context invalidated */ }
 }
 
 // ─── Page navigation detection ──────────────────────────
@@ -197,11 +200,14 @@ export function setupDomObserver(deps: ContentScriptDeps, debounceMs = 500): () 
     }
 
     timeoutId = setTimeout(() => {
-      const snapshot = captureDomSnapshot(deps.document);
-      deps.chrome.runtime.sendMessage({
-        type: 'DOM_SNAPSHOT',
-        payload: snapshot,
-      });
+      if (!deps.chrome.runtime?.id) return;
+      try {
+        const snapshot = captureDomSnapshot(deps.document);
+        deps.chrome.runtime.sendMessage({
+          type: 'DOM_SNAPSHOT',
+          payload: snapshot,
+        }).catch(() => {});
+      } catch { /* Extension context invalidated */ }
     }, debounceMs);
   });
 
@@ -228,7 +234,7 @@ export function setupDomObserver(deps: ContentScriptDeps, debounceMs = 500): () 
 // Auto-initialize when Chrome injects this content script.
 // Guard: only run in browser with chrome.runtime (not in test environment).
 
-if (typeof globalThis.chrome !== 'undefined' && globalThis.chrome?.runtime?.sendMessage) {
+if (typeof globalThis.chrome !== 'undefined' && typeof globalThis.chrome?.runtime?.sendMessage === 'function') {
   const deps: ContentScriptDeps = {
     chrome: globalThis.chrome,
     window: globalThis.window,
