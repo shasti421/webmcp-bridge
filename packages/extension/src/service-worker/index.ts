@@ -223,20 +223,22 @@ export async function handleStartRecording(
     status: 'recording',
   };
 
-  // Inject content script if not already present, then start recording
+  // Try sending START_RECORDING first — if content script is already loaded
+  // (via manifest content_scripts), this will succeed without re-injection.
+  try {
+    await chromeApi.tabs.sendMessage(tabId, { type: 'START_RECORDING' });
+    sendResponse({ ok: true, sessionId: state.recordingSession.id });
+    return;
+  } catch {
+    // Content script not present — inject it
+  }
+
   try {
     await chromeApi.scripting.executeScript({
       target: { tabId },
       files: ['content-script.js'],
     });
-  } catch {
-    // Already injected or injection failed — try sending anyway
-  }
-
-  // Small delay to let the content script initialize
-  await new Promise(resolve => setTimeout(resolve, 100));
-
-  try {
+    await new Promise(resolve => setTimeout(resolve, 100));
     await chromeApi.tabs.sendMessage(tabId, { type: 'START_RECORDING' });
     sendResponse({ ok: true, sessionId: state.recordingSession.id });
   } catch (error: unknown) {
@@ -374,6 +376,23 @@ export function initServiceWorker(chromeApi: typeof chrome): ServiceWorkerState 
 
   const router = createServiceWorkerMessageRouter(state, chromeApi);
   chromeApi.runtime.onMessage.addListener(router);
+
+  // Re-send START_RECORDING to content script after tab navigation
+  // (content script is re-injected by manifest but needs the recording signal)
+  if (chromeApi.tabs?.onUpdated) {
+    chromeApi.tabs.onUpdated.addListener((tabId, changeInfo) => {
+      if (
+        changeInfo.status === 'complete' &&
+        state.recordingSession &&
+        state.recordingSession.status === 'recording' &&
+        state.recordingSession.tabId === tabId
+      ) {
+        chromeApi.tabs.sendMessage(tabId, { type: 'START_RECORDING' }).catch(() => {
+          // Content script not ready yet
+        });
+      }
+    });
+  }
 
   // Load config from local storage
   chromeApi.storage.local.get(['bridge_api_url']).then((result: Record<string, unknown>) => {

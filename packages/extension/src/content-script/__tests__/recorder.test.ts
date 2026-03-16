@@ -2,8 +2,8 @@
  * @vitest-environment jsdom
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { Recorder } from '../recorder.js';
-import type { RecordedAction } from '../recorder.js';
+
+import { Recorder, type RecordedAction } from '../recorder.js';
 
 // ─── Mock chrome API ────────────────────────────────────
 
@@ -58,6 +58,11 @@ function fireClick(el: Element): void {
 function fireInput(el: Element, value: string): void {
   (el as HTMLInputElement).value = value;
   const event = new Event('input', { bubbles: true, composed: true });
+  el.dispatchEvent(event);
+}
+
+function fireChange(el: Element): void {
+  const event = new Event('change', { bubbles: true, composed: true });
   el.dispatchEvent(event);
 }
 
@@ -186,6 +191,215 @@ describe('Recorder', () => {
       const action: RecordedAction = sendAction.mock.calls[0][0];
       expect(action.type).toBe('input');
       expect(action.metadata?.inputValue).toBe('hello');
+      expect(action.metadata?.inputKind).toBe('text');
+    });
+
+    it('captures select changes immediately using selected option text', () => {
+      recorder.start();
+
+      const select = document.createElement('select');
+      select.setAttribute('aria-label', 'Filter 1');
+      const optionA = document.createElement('option');
+      optionA.value = 'status';
+      optionA.textContent = 'Status';
+      const optionB = document.createElement('option');
+      optionB.value = 'owner';
+      optionB.textContent = 'Owner';
+      select.append(optionA, optionB);
+      document.body.appendChild(select);
+
+      select.value = 'status';
+      fireChange(select);
+
+      expect(sendAction).toHaveBeenCalledTimes(1);
+      const action: RecordedAction = sendAction.mock.calls[0][0];
+      expect(action.type).toBe('input');
+      expect(action.element!.tag).toBe('select');
+      expect(action.metadata?.inputValue).toBe('Status');
+      expect(action.metadata?.inputKind).toBe('select');
+    });
+
+    it('deduplicates duplicate select input and change events', () => {
+      recorder.start();
+
+      const select = document.createElement('select');
+      select.setAttribute('aria-label', 'Filter 1');
+      const optionA = document.createElement('option');
+      optionA.value = 'status';
+      optionA.textContent = 'Status';
+      const optionB = document.createElement('option');
+      optionB.value = 'owner';
+      optionB.textContent = 'Owner';
+      select.append(optionA, optionB);
+      document.body.appendChild(select);
+
+      select.value = 'status';
+      fireInput(select, 'status');
+      fireChange(select);
+
+      expect(sendAction).toHaveBeenCalledTimes(1);
+      const action: RecordedAction = sendAction.mock.calls[0][0];
+      expect(action.type).toBe('input');
+      expect(action.metadata?.inputValue).toBe('Status');
+      expect(action.metadata?.inputKind).toBe('select');
+    });
+
+    it('captures option clicks as select changes on the controlling combobox', () => {
+      recorder.start();
+
+      const button = document.createElement('button');
+      button.setAttribute('aria-label', 'Filter 2');
+      button.setAttribute('aria-haspopup', 'listbox');
+      button.setAttribute('aria-controls', 'status-options');
+      document.body.appendChild(button);
+
+      const listbox = document.createElement('div');
+      listbox.id = 'status-options';
+      listbox.setAttribute('role', 'listbox');
+      const option = document.createElement('div');
+      option.setAttribute('role', 'option');
+      option.textContent = 'New';
+      listbox.appendChild(option);
+      document.body.appendChild(listbox);
+
+      fireClick(option);
+
+      expect(sendAction).toHaveBeenCalledTimes(1);
+      const action: RecordedAction = sendAction.mock.calls[0][0];
+      expect(action.type).toBe('input');
+      expect(action.element!.ariaLabel).toBe('Filter 2');
+      expect(action.element!.ariaRole).toBe('combobox');
+      expect(action.element!.selectors.aria).toEqual({ role: 'combobox', name: 'Filter 2' });
+      expect(action.metadata?.inputValue).toBe('New');
+      expect(action.metadata?.inputKind).toBe('select');
+    });
+
+    it('captures option clicks on an active expanded combobox without explicit popup linkage', () => {
+      recorder.start();
+
+      const button = document.createElement('button');
+      button.setAttribute('aria-label', 'Filter 1');
+      button.setAttribute('aria-haspopup', 'listbox');
+      button.setAttribute('aria-expanded', 'true');
+      button.tabIndex = 0;
+      document.body.appendChild(button);
+      button.focus();
+
+      const listbox = document.createElement('div');
+      listbox.setAttribute('role', 'listbox');
+      const option = document.createElement('div');
+      option.setAttribute('role', 'option');
+      option.textContent = 'Status';
+      listbox.appendChild(option);
+      document.body.appendChild(listbox);
+
+      fireClick(option);
+
+      expect(sendAction).toHaveBeenCalledTimes(1);
+      const action: RecordedAction = sendAction.mock.calls[0][0];
+      expect(action.type).toBe('input');
+      expect(action.element!.ariaLabel).toBe('Filter 1');
+      expect(action.element!.ariaRole).toBe('combobox');
+      expect(action.metadata?.inputValue).toBe('Status');
+      expect(action.metadata?.inputKind).toBe('select');
+    });
+
+    it('matches popup controllers even when popup ids contain special characters', () => {
+      recorder.start();
+
+      const button = document.createElement('button');
+      button.setAttribute('aria-label', 'Filter 2');
+      button.setAttribute('aria-haspopup', 'listbox');
+      button.setAttribute('aria-controls', '995:0');
+      document.body.appendChild(button);
+
+      const listbox = document.createElement('div');
+      listbox.id = '995:0';
+      listbox.setAttribute('role', 'listbox');
+      const option = document.createElement('div');
+      option.setAttribute('role', 'option');
+      option.textContent = 'New';
+      listbox.appendChild(option);
+      document.body.appendChild(listbox);
+
+      fireClick(option);
+
+      expect(sendAction).toHaveBeenCalledTimes(1);
+      const action: RecordedAction = sendAction.mock.calls[0][0];
+      expect(action.type).toBe('input');
+      expect(action.element!.ariaLabel).toBe('Filter 2');
+      expect(action.metadata?.inputValue).toBe('New');
+    });
+
+    it('captures menuitemradio clicks as select input when controlled by a listbox-style combobox', () => {
+      recorder.start();
+
+      const button = document.createElement('button');
+      button.setAttribute('aria-label', 'Filter 1');
+      button.setAttribute('aria-haspopup', 'listbox');
+      button.setAttribute('aria-controls', 'status-menu');
+      button.setAttribute('aria-expanded', 'true');
+      document.body.appendChild(button);
+
+      const menu = document.createElement('div');
+      menu.id = 'status-menu';
+      menu.setAttribute('role', 'menu');
+      const item = document.createElement('div');
+      item.setAttribute('role', 'menuitemradio');
+      item.textContent = 'Status';
+      menu.appendChild(item);
+      document.body.appendChild(menu);
+
+      fireClick(item);
+
+      expect(sendAction).toHaveBeenCalledTimes(1);
+      const action: RecordedAction = sendAction.mock.calls[0][0];
+      expect(action.type).toBe('input');
+      expect(action.element!.ariaLabel).toBe('Filter 1');
+      expect(action.element!.ariaRole).toBe('combobox');
+      expect(action.metadata?.inputValue).toBe('Status');
+      expect(action.metadata?.inputKind).toBe('select');
+    });
+
+    it('keeps menu item clicks as click actions instead of coercing them into selects', () => {
+      recorder.start();
+
+      const button = document.createElement('button');
+      button.setAttribute('aria-label', 'Show Status column actions');
+      button.setAttribute('aria-haspopup', 'menu');
+      button.setAttribute('aria-expanded', 'true');
+      document.body.appendChild(button);
+
+      const menu = document.createElement('div');
+      menu.setAttribute('role', 'menu');
+      const item = document.createElement('div');
+      item.setAttribute('role', 'menuitemradio');
+      item.textContent = 'Sort by Status';
+      menu.appendChild(item);
+      document.body.appendChild(menu);
+
+      fireClick(item);
+
+      expect(sendAction).toHaveBeenCalledTimes(1);
+      const action: RecordedAction = sendAction.mock.calls[0][0];
+      expect(action.type).toBe('click');
+      expect(action.metadata?.inputKind).toBeUndefined();
+      expect(action.element!.text).toContain('Sort by Status');
+    });
+
+    it('deduplicates text input blur events when value has already been recorded', async () => {
+      recorder.start();
+      const input = createMockElement({ tagName: 'INPUT', type: 'text' }) as HTMLInputElement;
+
+      fireInput(input, 'hello');
+      await new Promise(resolve => setTimeout(resolve, 400));
+      fireChange(input);
+
+      expect(sendAction).toHaveBeenCalledTimes(1);
+      const action: RecordedAction = sendAction.mock.calls[0][0];
+      expect(action.type).toBe('input');
+      expect(action.metadata?.inputValue).toBe('hello');
+      expect(action.metadata?.inputKind).toBe('text');
     });
   });
 

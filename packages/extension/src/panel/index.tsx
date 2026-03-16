@@ -3,9 +3,10 @@ import { createRoot } from 'react-dom/client';
 import { CaptureMode } from './components/CaptureMode.js';
 import { ExecuteMode } from './components/ExecuteMode.js';
 import { RecordMode } from './components/RecordMode.js';
+import { GuideMode } from './components/GuideMode.js';
 import { sidePanelReducer, initialState } from './reducer.js';
 
-type Mode = 'capture' | 'execute' | 'record';
+type Mode = 'guide' | 'record' | 'capture' | 'execute';
 
 const TAB_STYLE = (active: boolean) => ({
   fontWeight: active ? 'bold' as const : 'normal' as const,
@@ -20,11 +21,14 @@ const TAB_STYLE = (active: boolean) => ({
 
 function App() {
   const [state, dispatch] = useReducer(sidePanelReducer, initialState);
-  const [mode, setMode] = useState<Mode>('record');
+  const [mode, setMode] = useState<Mode>('guide');
 
   return (
     <div style={{ fontFamily: 'system-ui, sans-serif', padding: '12px', height: '100vh', display: 'flex', flexDirection: 'column' }}>
       <header style={{ display: 'flex', gap: '6px', marginBottom: '12px', flexShrink: 0 }}>
+        <button onClick={() => setMode('guide')} style={TAB_STYLE(mode === 'guide')}>
+          Guide
+        </button>
         <button onClick={() => setMode('record')} style={TAB_STYLE(mode === 'record')}>
           Record
         </button>
@@ -36,6 +40,7 @@ function App() {
         </button>
       </header>
       <div style={{ flex: 1, overflow: 'auto' }}>
+        {mode === 'guide' && <GuideMode state={state} dispatch={dispatch} />}
         {mode === 'record' && <RecordMode state={state} dispatch={dispatch} />}
         {mode === 'capture' && <CaptureMode state={state} dispatch={dispatch} />}
         {mode === 'execute' && <ExecuteMode state={state} dispatch={dispatch} />}

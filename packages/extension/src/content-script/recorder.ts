@@ -45,6 +45,7 @@ export interface RecordedAction {
   element?: ElementContext;
   metadata?: {
     inputValue?: string;
+    inputKind?: 'text' | 'select' | 'checkbox' | 'radio';
     key?: string;
     fromUrl?: string;
     toUrl?: string;
@@ -63,6 +64,190 @@ function truncate(str: string | null | undefined, len: number): string | undefin
   if (!str) return undefined;
   const trimmed = str.trim();
   return trimmed.length > 0 ? trimmed.substring(0, len) : undefined;
+}
+
+function isComboboxLike(el: Element | null): boolean {
+  if (!el) return false;
+
+  const explicitRole = el.getAttribute('role')?.toLowerCase();
+  if (explicitRole === 'combobox') {
+    return true;
+  }
+
+  if (el instanceof HTMLSelectElement || el.tagName.toLowerCase() === 'select') {
+    return true;
+  }
+
+  const popupKind = (el.getAttribute('aria-haspopup') || '').toLowerCase();
+  const hasPopupLink =
+    el.hasAttribute('aria-controls') ||
+    el.hasAttribute('aria-owns') ||
+    el.hasAttribute('aria-expanded');
+
+  return popupKind === 'listbox' && hasPopupLink;
+}
+
+function inferAccessibleRole(el: Element): string | undefined {
+  const explicitRole = el.getAttribute('role');
+  if (explicitRole) {
+    return explicitRole;
+  }
+
+  if (isComboboxLike(el)) {
+    return 'combobox';
+  }
+
+  const tag = el.tagName.toLowerCase();
+  if (tag === 'button') return 'button';
+  if (tag === 'a') return 'link';
+  if (tag === 'textarea') return 'textbox';
+
+  if (tag === 'input') {
+    const type = (el as HTMLInputElement).type?.toLowerCase();
+    if (type === 'checkbox') return 'checkbox';
+    if (type === 'radio') return 'radio';
+    if (type === 'search') return 'searchbox';
+    return 'textbox';
+  }
+
+  return undefined;
+}
+
+function getInputKind(el: Element): 'text' | 'select' | 'checkbox' | 'radio' {
+  if (isComboboxLike(el)) {
+    return 'select';
+  }
+
+  const type = (el as HTMLInputElement).type?.toLowerCase();
+  if (type === 'checkbox') return 'checkbox';
+  if (type === 'radio') return 'radio';
+  return 'text';
+}
+
+function getInputValue(el: Element): string {
+  if (el instanceof HTMLSelectElement) {
+    const selectedOption = el.selectedOptions[0];
+    return truncate(selectedOption?.textContent || el.value, 200) || '';
+  }
+
+  if (el instanceof HTMLInputElement) {
+    if (el.type === 'checkbox' || el.type === 'radio') {
+      return el.checked ? 'true' : 'false';
+    }
+    return truncate(el.value, 200) || '';
+  }
+
+  if (el instanceof HTMLTextAreaElement) {
+    return truncate(el.value, 200) || '';
+  }
+
+  return truncate((el as HTMLInputElement).value || '', 200) || '';
+}
+
+function scoreSelectionController(candidate: Element, popup: Element, popupId?: string): number {
+  let score = 0;
+
+  if (popupId && (candidate.getAttribute('aria-controls') === popupId || candidate.getAttribute('aria-owns') === popupId)) {
+    score += 300;
+  }
+
+  if (candidate === document.activeElement) {
+    score += 180;
+  }
+
+  if (candidate.getAttribute('aria-expanded') === 'true') {
+    score += 120;
+  }
+
+  if (candidate.getAttribute('role')?.toLowerCase() === 'combobox') {
+    score += 100;
+  }
+
+  if ((candidate.getAttribute('aria-haspopup') || '').toLowerCase() === 'listbox') {
+    score += 90;
+  }
+
+  const candidateLabel = `${candidate.getAttribute('aria-label') || ''} ${candidate.textContent || ''}`.toLowerCase();
+  if (candidateLabel.includes('filter')) {
+    score += 40;
+  }
+
+  try {
+    const popupRect = popup.getBoundingClientRect();
+    const candidateRect = candidate.getBoundingClientRect();
+    const popupCenterX = popupRect.left + popupRect.width / 2;
+    const popupCenterY = popupRect.top + popupRect.height / 2;
+    const candidateCenterX = candidateRect.left + candidateRect.width / 2;
+    const candidateCenterY = candidateRect.top + candidateRect.height / 2;
+    const distance = Math.hypot(popupCenterX - candidateCenterX, popupCenterY - candidateCenterY);
+    score += Math.max(0, 80 - Math.round(distance / 8));
+  } catch {
+    // Ignore layout failures in synthetic environments.
+  }
+
+  return score;
+}
+
+function findSelectionSource(target: Element): { source: Element; selectedText: string } | null {
+  const optionEl = target.closest('option, [role="option"], [role="menuitemradio"], [role="radio"]');
+  if (!optionEl) return null;
+
+  const selectedText =
+    truncate(optionEl.getAttribute('aria-label'), 200) ||
+    truncate(optionEl.textContent, 200) ||
+    truncate(optionEl.getAttribute('data-value'), 200);
+
+  if (!selectedText) return null;
+
+  if (optionEl instanceof HTMLOptionElement) {
+    const selectEl = optionEl.closest('select');
+    if (selectEl) {
+      return { source: selectEl, selectedText };
+    }
+  }
+
+  const popup = optionEl.closest('[role="listbox"], [role="menu"]');
+  if (!popup) {
+    return null;
+  }
+
+  const popupId = popup.id || undefined;
+  const candidates = new Set<Element>();
+
+  if (popupId) {
+    for (const candidate of document.querySelectorAll('[aria-controls], [aria-owns]')) {
+      if (!(candidate instanceof Element)) continue;
+      if (candidate.getAttribute('aria-controls') === popupId || candidate.getAttribute('aria-owns') === popupId) {
+        candidates.add(candidate);
+      }
+    }
+  }
+
+  const activeEl = document.activeElement;
+  if (activeEl instanceof Element && isComboboxLike(activeEl)) {
+    candidates.add(activeEl);
+  }
+
+  for (const candidate of document.querySelectorAll(
+    '[role="combobox"], [aria-haspopup="listbox"][aria-expanded="true"], [aria-haspopup="listbox"][aria-controls], [aria-haspopup="listbox"][aria-owns]',
+  )) {
+    if (candidate instanceof Element && isComboboxLike(candidate)) {
+      candidates.add(candidate);
+    }
+  }
+
+  let bestCandidate: Element | null = null;
+  let bestScore = 0;
+
+  for (const candidate of candidates) {
+    const score = scoreSelectionController(candidate, popup, popupId);
+    if (score > bestScore) {
+      bestScore = score;
+      bestCandidate = candidate;
+    }
+  }
+
+  return bestCandidate ? { source: bestCandidate, selectedText } : null;
 }
 
 /**
@@ -200,7 +385,7 @@ function buildElementContext(el: Element, composedPath?: EventTarget[]): Element
   const tag = el.tagName.toLowerCase();
   const rect = el.getBoundingClientRect();
 
-  const ariaRole = el.getAttribute('role') || undefined;
+  const ariaRole = inferAccessibleRole(el);
   const ariaLabel = el.getAttribute('aria-label') || undefined;
   const ariaName = ariaLabel || truncate(el.textContent, 60);
 
@@ -265,13 +450,20 @@ export class Recorder {
   private actions: RecordedAction[] = [];
   private maxActions = 500;
   private inputDebounceTimers: Map<Element, ReturnType<typeof setTimeout>> = new Map();
+  private recentInputEmissions: WeakMap<Element, {
+    value: string;
+    kind: 'text' | 'select' | 'checkbox' | 'radio';
+    timestamp: number;
+  }> = new WeakMap();
   private inputDebounceMs = 300;
+  private inputDuplicateWindowMs = 2000;
   private lastUrl: string;
   private sendAction: (action: RecordedAction) => void;
 
   // Bound handlers for cleanup
   private boundClickHandler: (e: MouseEvent) => void;
   private boundInputHandler: (e: Event) => void;
+  private boundChangeHandler: (e: Event) => void;
   private boundKeyHandler: (e: KeyboardEvent) => void;
 
   constructor(sendAction: (action: RecordedAction) => void) {
@@ -280,6 +472,7 @@ export class Recorder {
 
     this.boundClickHandler = this.handleClick.bind(this);
     this.boundInputHandler = this.handleInput.bind(this);
+    this.boundChangeHandler = this.handleChange.bind(this);
     this.boundKeyHandler = this.handleKeypress.bind(this);
   }
 
@@ -288,10 +481,12 @@ export class Recorder {
     this.recording = true;
     this.actions = [];
     this.lastUrl = window.location.href;
+    this.recentInputEmissions = new WeakMap();
     actionCounter = 0;
 
     document.addEventListener('click', this.boundClickHandler, { capture: true });
     document.addEventListener('input', this.boundInputHandler, { capture: true });
+    document.addEventListener('change', this.boundChangeHandler, { capture: true });
     document.addEventListener('keydown', this.boundKeyHandler, { capture: true });
 
     // Hook navigation
@@ -304,6 +499,7 @@ export class Recorder {
 
     document.removeEventListener('click', this.boundClickHandler, { capture: true });
     document.removeEventListener('input', this.boundInputHandler, { capture: true });
+    document.removeEventListener('change', this.boundChangeHandler, { capture: true });
     document.removeEventListener('keydown', this.boundKeyHandler, { capture: true });
 
     // Clear debounce timers
@@ -311,6 +507,7 @@ export class Recorder {
       clearTimeout(timer);
     }
     this.inputDebounceTimers.clear();
+    this.recentInputEmissions = new WeakMap();
 
     return this.actions;
   }
@@ -336,6 +533,12 @@ export class Recorder {
     if (!(target instanceof Element)) return;
 
     const el = target as Element;
+    const selection = findSelectionSource(el);
+    if (selection) {
+      this.emitInputAction(selection.source, e.composedPath(), selection.selectedText, 'select');
+      return;
+    }
+
     const ctx = buildElementContext(el, e.composedPath());
 
     // Check if navigation happened
@@ -371,6 +574,12 @@ export class Recorder {
     if (!(target instanceof Element)) return;
 
     const el = target as Element;
+    const inputKind = getInputKind(el);
+
+    if (inputKind !== 'text') {
+      this.emitInputAction(el, e.composedPath(), getInputValue(el), inputKind);
+      return;
+    }
 
     // Debounce rapid input events for the same element
     const existing = this.inputDebounceTimers.get(el);
@@ -378,25 +587,60 @@ export class Recorder {
 
     const timer = setTimeout(() => {
       this.inputDebounceTimers.delete(el);
-
-      const ctx = buildElementContext(el, e.composedPath());
-      const inputValue = (el as HTMLInputElement).value || '';
-
-      const action: RecordedAction = {
-        id: generateId(),
-        type: 'input',
-        timestamp: Date.now(),
-        url: window.location.href,
-        element: ctx,
-        metadata: {
-          inputValue: inputValue.substring(0, 200),
-        },
-      };
-
-      this.emit(action);
+      this.emitInputAction(el, e.composedPath(), getInputValue(el), inputKind);
     }, this.inputDebounceMs);
 
     this.inputDebounceTimers.set(el, timer);
+  }
+
+  private handleChange(e: Event): void {
+    if (!this.recording) return;
+
+    const target = e.composedPath()[0];
+    if (!(target instanceof Element)) return;
+
+    const el = target as Element;
+    const inputKind = getInputKind(el);
+    this.emitInputAction(el, e.composedPath(), getInputValue(el), inputKind);
+  }
+
+  private emitInputAction(
+    el: Element,
+    composedPath: EventTarget[],
+    inputValue: string,
+    inputKind: 'text' | 'select' | 'checkbox' | 'radio',
+  ): void {
+    const now = Date.now();
+    const previous = this.recentInputEmissions.get(el);
+    if (
+      previous &&
+      previous.kind === inputKind &&
+      previous.value === inputValue &&
+      now - previous.timestamp < this.inputDuplicateWindowMs
+    ) {
+      return;
+    }
+
+    const ctx = buildElementContext(el, composedPath);
+
+    const action: RecordedAction = {
+      id: generateId(),
+      type: 'input',
+      timestamp: now,
+      url: window.location.href,
+      element: ctx,
+      metadata: {
+        inputValue,
+        inputKind,
+      },
+    };
+
+    this.recentInputEmissions.set(el, {
+      value: inputValue,
+      kind: inputKind,
+      timestamp: now,
+    });
+    this.emit(action);
   }
 
   private handleKeypress(e: KeyboardEvent): void {
@@ -432,36 +676,33 @@ export class Recorder {
   }
 
   private hookNavigation(): void {
-    const self = this;
     const originalPush = history.pushState;
     const originalReplace = history.replaceState;
+    const emitNavigationIfNeeded = (from: string, to: string): void => {
+      if (from !== to && this.recording) {
+        this.emitNavigation(from, to);
+        this.lastUrl = to;
+      }
+    };
 
     history.pushState = function (...args: Parameters<typeof history.pushState>) {
       const from = window.location.href;
       originalPush.apply(this, args);
-      const to = window.location.href;
-      if (from !== to && self.recording) {
-        self.emitNavigation(from, to);
-        self.lastUrl = to;
-      }
+      emitNavigationIfNeeded(from, window.location.href);
     };
 
     history.replaceState = function (...args: Parameters<typeof history.replaceState>) {
       const from = window.location.href;
       originalReplace.apply(this, args);
-      const to = window.location.href;
-      if (from !== to && self.recording) {
-        self.emitNavigation(from, to);
-        self.lastUrl = to;
-      }
+      emitNavigationIfNeeded(from, window.location.href);
     };
 
     window.addEventListener('popstate', () => {
-      if (!self.recording) return;
+      if (!this.recording) return;
       const newUrl = window.location.href;
-      if (newUrl !== self.lastUrl) {
-        self.emitNavigation(self.lastUrl, newUrl);
-        self.lastUrl = newUrl;
+      if (newUrl !== this.lastUrl) {
+        this.emitNavigation(this.lastUrl, newUrl);
+        this.lastUrl = newUrl;
       }
     });
   }
@@ -476,7 +717,18 @@ export function initRecorder(): void {
     if (message.type === 'START_RECORDING') {
       if (!recorderInstance) {
         recorderInstance = new Recorder((action) => {
-          chrome.runtime.sendMessage({ type: 'ACTION_RECORDED', payload: action }).catch(() => {});
+          // Guard: chrome.runtime.id is undefined when extension context is invalidated
+          if (!chrome.runtime?.id) {
+            recorderInstance?.stop();
+            recorderInstance = null;
+            return;
+          }
+          try {
+            chrome.runtime.sendMessage({ type: 'ACTION_RECORDED', payload: action }).catch(() => {});
+          } catch {
+            recorderInstance?.stop();
+            recorderInstance = null;
+          }
         });
       }
       recorderInstance.start();

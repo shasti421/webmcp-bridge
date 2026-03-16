@@ -37,6 +37,10 @@ function getActionLabel(action: RecordedAction): string {
     case 'input': {
       const field = el?.nearbyLabel || el?.ariaLabel || el?.placeholder || el?.tag || 'field';
       const val = action.metadata?.inputValue;
+      if (action.metadata?.inputKind === 'select') {
+        const selected = typeof val === 'string' ? val.substring(0, 20) : 'option';
+        return `Select "${selected}${typeof val === 'string' && val.length > 20 ? '...' : ''}" in "${field}"`;
+      }
       return `Type in "${field}"${val ? `: "${val.substring(0, 20)}${val.length > 20 ? '...' : ''}"` : ''}`;
     }
     case 'navigate': {
